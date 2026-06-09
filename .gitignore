@@ -1,0 +1,32 @@
+# nv-agent .gitignore
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data & indexes (generated at runtime)
+data/sessions/
+kb/index/
+
+# Claude Code
+.claude/

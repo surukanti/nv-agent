@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NV-Agent</title>
+  <link rel="stylesheet" href="/ui/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">⚡</span>
+          <span class="logo-text">NV-Agent</span>
+        </div>
+        <button id="sidebar-toggle" class="icon-btn" title="Toggle sidebar">☰</button>
+      </div>
+
+      <div class="sidebar-section">
+        <h3 class="section-title">Sessions</h3>
+        <button id="new-session-btn" class="btn btn-primary btn-block">
+          <span class="btn-icon">＋</span> New Chat
+        </button>
+        <div id="session-list" class="session-list"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3 class="section-title">Knowledge Base</h3>
+        <div class="kb-status">
+          <span class="kb-label">Chunks:</span>
+          <span id="kb-chunks" class="kb-value">—</span>
+        </div>
+        <div class="kb-status">
+          <span class="kb-label">Status:</span>
+          <span id="kb-ready" class="kb-value">—</span>
+        </div>
+        <button id="kb-refresh-btn" class="btn btn-secondary btn-block btn-sm">Refresh Status</button>
+
+        <details class="kb-details">
+          <summary class="kb-summary">Add to Knowledge Base</summary>
+          <div class="kb-form">
+            <textarea id="kb-text-input" placeholder="Paste text to add..." rows="4"></textarea>
+            <input id="kb-source-input" type="text" placeholder="Source label (optional)" />
+            <button id="kb-ingest-btn" class="btn btn-secondary btn-block btn-sm">Ingest Text</button>
+          </div>
+        </details>
+
+        <details class="kb-details">
+          <summary class="kb-summary">Upload File</summary>
+          <div class="kb-form">
+            <input id="kb-file-input" type="file" accept=".txt,.md,.py,.json,.yaml,.yml,.csv,.html,.xml,.rst,.pdf,.docx" />
+            <button id="kb-upload-btn" class="btn btn-secondary btn-block btn-sm">Upload &amp; Ingest</button>
+          </div>
+        </details>
+
+        <button id="kb-reset-btn" class="btn btn-danger btn-block btn-sm">Reset Knowledge Base</button>
+      </div>
+
+      <div class="sidebar-footer">
+        <span class="footer-text">Powered by NVIDIA NIM</span>
+      </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main id="main" class="main">
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">⚡</div>
+        <h2 class="empty-title">NV-Agent</h2>
+        <p class="empty-subtitle">RAG Chat over your custom knowledge base</p>
+        <div class="empty-hints">
+          <div class="hint">💡 Ask questions about documents in your knowledge base</div>
+          <div class="hint">📄 Add files via the sidebar to expand the KB</div>
+          <div class="hint">🔄 Responses are streamed in real-time via WebSocket</div>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div id="messages" class="messages" style="display:none"></div>
+
+      <!-- Input bar -->
+      <div id="input-bar" class="input-bar">
+        <div class="input-wrapper">
+          <textarea id="msg-input" placeholder="Ask about your knowledge base…" rows="1"></textarea>
+          <button id="send-btn" class="send-btn" title="Send message" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+        <div id="typing-indicator" class="typing-indicator" style="display:none">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="typing-text">Agent is thinking…</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <div id="reset-modal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <h3>Reset Knowledge Base?</h3>
+      <p>This will permanently delete all indexed documents and chunks. This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button id="reset-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button id="reset-confirm-btn" class="btn btn-danger">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/ui/marked.min.js"></script>
+  <script src="/ui/app.js"></script>
+</body>
+</html>
