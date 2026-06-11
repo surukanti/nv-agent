@@ -6,7 +6,7 @@ import warnings
 from pathlib import Path
 
 from config import config
-from kb.chunker import Chunk, chunk_text
+from kb.chunker import chunk_text
 from kb.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ warnings.filterwarnings("ignore", message=".*XMLParser.*", category=UserWarning)
 
 
 # ── Text-based file readers ─────────────────────────────────────────
+
 
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -37,12 +38,15 @@ _READERS = {
 
 # ── PDF reader ──────────────────────────────────────────────────────
 
+
 def _read_pdf(path: Path) -> str:
     """Extract text from a PDF file using PyPDF2."""
     try:
         from PyPDF2 import PdfReader
     except ImportError:
-        raise ImportError("PyPDF2 is required for PDF support. Install it with: pip install PyPDF2>=3.0.0")
+        raise ImportError(
+            "PyPDF2 is required for PDF support. Install it with: pip install PyPDF2>=3.0.0"
+        )
 
     reader = PdfReader(str(path))
     parts = []
@@ -52,7 +56,9 @@ def _read_pdf(path: Path) -> str:
             if text:
                 parts.append(text)
         except Exception as exc:
-            logger.warning("[ingest] failed to extract text from PDF page %d of %s: %s", i, path, exc)
+            logger.warning(
+                "[ingest] failed to extract text from PDF page %d of %s: %s", i, path, exc
+            )
 
     if not parts:
         logger.warning("[ingest] no text extracted from PDF: %s", path)
@@ -63,12 +69,15 @@ def _read_pdf(path: Path) -> str:
 
 # ── DOCX reader ─────────────────────────────────────────────────────
 
+
 def _read_docx(path: Path) -> str:
     """Extract text from a DOCX file using python-docx."""
     try:
         from docx import Document
     except ImportError:
-        raise ImportError("python-docx is required for DOCX support. Install it with: pip install python-docx>=1.1.0")
+        raise ImportError(
+            "python-docx is required for DOCX support. Install it with: pip install python-docx>=1.1.0"
+        )
 
     doc = Document(str(path))
     parts = []
@@ -103,6 +112,7 @@ _READERS[".docx"] = _read_docx
 
 class DocumentIngestionError(Exception):
     """Raised when a document cannot be ingested."""
+
     pass
 
 
@@ -182,8 +192,7 @@ def ingest_documents(
             error_count += 1
 
     logger.info(
-        "[ingest] completed: %d files, %d chunks, %d errors",
-        file_count, total_chunks, error_count
+        "[ingest] completed: %d files, %d chunks, %d errors", file_count, total_chunks, error_count
     )
 
     if error_count > 0 and file_count == 0:
@@ -252,7 +261,9 @@ def ingest_file(
     ext = path.suffix.lower()
     reader = _READERS.get(ext)
     if reader is None:
-        raise DocumentIngestionError(f"Unsupported file type: {ext}. Supported: {list(_READERS.keys())}")
+        raise DocumentIngestionError(
+            f"Unsupported file type: {ext}. Supported: {list(_READERS.keys())}"
+        )
 
     try:
         text = reader(path)

@@ -30,7 +30,9 @@ def create_app() -> FastAPI:
     # 1. Rate limiting (protects all /api/* routes, per-IP sliding window)
     rate_limit_str = os.environ.get("NV_AGENT_RATE_LIMIT", "60/minute")
     max_requests, window_seconds = parse_rate_limit(rate_limit_str)
-    app.add_middleware(RateLimitMiddleware, max_requests=max_requests, window_seconds=window_seconds)
+    app.add_middleware(
+        RateLimitMiddleware, max_requests=max_requests, window_seconds=window_seconds
+    )
 
     # 2. API key auth (only active when NV_AGENT_AUTH_KEY is set)
     auth_key = get_auth_key()

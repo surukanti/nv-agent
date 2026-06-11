@@ -8,11 +8,12 @@ For the production RAG web server, see main.py.
 """
 
 import os
+
 from openai import OpenAI
 
 api_key = os.environ.get("NVIDIA_API_KEY")
 if not api_key:
-    raise EnvironmentError(
+    raise OSError(
         "NVIDIA_API_KEY environment variable is not set. "
         "Export it before running: export NVIDIA_API_KEY='your-key-here'"
     )

@@ -6,9 +6,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from kb.ingest import (
-    DocumentIngestionError,
     _READERS,
+    DocumentIngestionError,
     _read_text,
     ingest_documents,
     ingest_file,
@@ -30,7 +31,9 @@ class TestReaders:
             os.unlink(f.name)
 
     def test_read_text_utf8(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", encoding="utf-8", delete=False
+        ) as f:
             f.write("Héllo wörld! 🌍")
             f.flush()
         try:
@@ -40,8 +43,20 @@ class TestReaders:
             os.unlink(f.name)
 
     def test_readers_dict_has_expected_extensions(self):
-        expected = {".txt", ".md", ".py", ".json", ".yaml", ".yml", ".csv",
-                    ".html", ".xml", ".rst", ".pdf", ".docx"}
+        expected = {
+            ".txt",
+            ".md",
+            ".py",
+            ".json",
+            ".yaml",
+            ".yml",
+            ".csv",
+            ".html",
+            ".xml",
+            ".rst",
+            ".pdf",
+            ".docx",
+        }
         assert expected == set(_READERS.keys())
 
     def test_readers_pdf_is_callable(self):
@@ -135,7 +150,10 @@ class TestIngestDocuments:
         with open(os.path.join(data_dir, "doc1.txt"), "w") as f:
             f.write("Document one has some content for testing the ingestion pipeline. " * 10)
         with open(os.path.join(data_dir, "doc2.md"), "w") as f:
-            f.write("# Document Two\n\nThis is markdown content with enough text to be chunked properly. " * 10)
+            f.write(
+                "# Document Two\n\nThis is markdown content with enough text to be chunked properly. "
+                * 10
+            )
 
         index_dir = os.path.join(tmp_dir, "index")
         store = VectorStore(index_dir=index_dir, embedding_dim=128)

@@ -2,8 +2,8 @@
 
 from unittest.mock import patch
 
-
 # ── Health endpoint ──────────────────────────────────────────
+
 
 class TestHealthEndpoint:
     """Tests for GET /api/health."""
@@ -17,6 +17,7 @@ class TestHealthEndpoint:
 
 
 # ── Session endpoints ───────────────────────────────────────
+
 
 class TestSessionEndpoints:
     """Tests for session CRUD via REST API."""
@@ -77,6 +78,7 @@ class TestSessionEndpoints:
 
 # ── Chat endpoint (REST, non-streaming) ─────────────────────
 
+
 class TestChatEndpoint:
     """Tests for POST /api/chat (non-streaming)."""
 
@@ -106,15 +108,18 @@ class TestChatEndpoint:
 
 # ── Chat streaming endpoint (SSE) ───────────────────────────
 
+
 class TestChatStreamEndpoint:
     """Tests for POST /api/chat/stream (SSE)."""
 
     @patch("agent.rag_agent.RAGAgent.chat_stream")
     def test_stream_returns_events(self, mock_stream, app_client_with_kb):
-        mock_stream.return_value = iter([
-            {"type": "text", "content": "Hello "},
-            {"type": "text", "content": "world"},
-        ])
+        mock_stream.return_value = iter(
+            [
+                {"type": "text", "content": "Hello "},
+                {"type": "text", "content": "world"},
+            ]
+        )
 
         create_resp = app_client_with_kb.post("/api/sessions")
         session_id = create_resp.json()["session_id"]
@@ -128,6 +133,7 @@ class TestChatStreamEndpoint:
 
 
 # ── Knowledge Base endpoints ────────────────────────────────
+
 
 class TestKBEndpoints:
     """Tests for knowledge base management endpoints."""
@@ -177,6 +183,7 @@ class TestKBEndpoints:
 
 # ── Upload endpoint ─────────────────────────────────────────
 
+
 class TestUploadEndpoint:
     """Tests for POST /api/kb/upload (multipart file upload)."""
 
@@ -212,32 +219,38 @@ class TestUploadEndpoint:
 
 # ── Filename sanitization ───────────────────────────────────
 
+
 class TestFilenameSanitization:
     """Tests for _sanitize_filename() in routes.py."""
 
     def test_strips_directory_traversal(self):
         from chat.routes import _sanitize_filename
+
         result = _sanitize_filename("../../../etc/passwd")
         assert ".." not in result
         assert "/" not in result
 
     def test_removes_null_bytes(self):
         from chat.routes import _sanitize_filename
+
         result = _sanitize_filename("file\x00name.txt")
         assert "\x00" not in result
 
     def test_replaces_special_chars(self):
         from chat.routes import _sanitize_filename
+
         result = _sanitize_filename("my file (1).txt")
         assert " " not in result or "_" in result
 
     def test_preserves_normal_filename(self):
         from chat.routes import _sanitize_filename
+
         result = _sanitize_filename("document.pdf")
         assert result == "document.pdf"
 
     def test_handles_dot_prefix(self):
         from chat.routes import _sanitize_filename
+
         result = _sanitize_filename(".env")
         # Should be prefixed to avoid hidden files
         assert not result.startswith(".") or "upload_" in result

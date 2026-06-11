@@ -1,13 +1,14 @@
 """Unit tests for agent/rag_agent.py — RAG agent logic."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent.rag_agent import (
+    LLMError,
     RAGAgent,
     RAGAgentError,
     SessionNotFoundError,
-    LLMError,
 )
 
 
@@ -89,7 +90,9 @@ class TestRAGAgentContextRetrieval:
         mock_store = MagicMock()
         mock_store.search.return_value = [
             SearchResult(
-                chunk=Chunk(text="Test content", source="doc.md", chunk_index=0, start_char=0, end_char=12),
+                chunk=Chunk(
+                    text="Test content", source="doc.md", chunk_index=0, start_char=0, end_char=12
+                ),
                 score=0.9,
             )
         ]
@@ -127,7 +130,9 @@ class TestRAGAgentBuildMessages:
         mock_store = MagicMock()
         mock_store.search.return_value = [
             SearchResult(
-                chunk=Chunk(text="Relevant info", source="doc.md", chunk_index=0, start_char=0, end_char=13),
+                chunk=Chunk(
+                    text="Relevant info", source="doc.md", chunk_index=0, start_char=0, end_char=13
+                ),
                 score=0.9,
             )
         ]

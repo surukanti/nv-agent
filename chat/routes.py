@@ -8,14 +8,13 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from agent.rag_agent import RAGAgent, SessionNotFoundError, LLMError
-from kb.ingest import ingest_documents, ingest_text, ingest_file
+from agent.rag_agent import LLMError, RAGAgent, SessionNotFoundError
+from kb.ingest import ingest_documents, ingest_file, ingest_text
 from kb.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -23,8 +22,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ── Shared state (initialized at startup) ──────────────────────────
-_agent: Optional[RAGAgent] = None
-_store: Optional[VectorStore] = None
+_agent: RAGAgent | None = None
+_store: VectorStore | None = None
 
 
 def set_agent(agent: RAGAgent) -> None:
@@ -50,6 +49,7 @@ def _get_store() -> VectorStore:
 
 
 # ── Request / Response models ──────────────────────────────────────
+
 
 class CreateSessionResponse(BaseModel):
     session_id: str
@@ -110,8 +110,18 @@ MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 # Supported file extensions for upload
 SUPPORTED_EXTENSIONS = {
-    ".txt", ".md", ".py", ".json", ".yaml", ".yml",
-    ".csv", ".html", ".xml", ".rst", ".pdf", ".docx",
+    ".txt",
+    ".md",
+    ".py",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".csv",
+    ".html",
+    ".xml",
+    ".rst",
+    ".pdf",
+    ".docx",
 }
 
 # ── Security helpers ────────────────────────────────────────────────
@@ -132,6 +142,7 @@ def _sanitize_filename(name: str) -> str:
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
+
 
 async def _run_sync(func, *args):
     """Run a synchronous function in the default thread executor."""
@@ -173,6 +184,7 @@ def _consume_stream(agent, session_id, message, queue):
 
 # ── Health ──────────────────────────────────────────────────────────
 
+
 @router.get("/health", response_model=HealthResponse)
 async def health():
     agent = _get_agent()
@@ -182,6 +194,7 @@ async def health():
 
 class DetailedHealthResponse(BaseModel):
     """Detailed health check response with system info."""
+
     status: str
     version: str
     kb_chunks: int
@@ -197,7 +210,6 @@ class DetailedHealthResponse(BaseModel):
 @router.get("/health/detailed", response_model=DetailedHealthResponse)
 async def health_detailed():
     """Detailed health check — returns system info, model config, and status."""
-    import time
 
     from chat.auth import get_auth_key
     from config import config
@@ -222,6 +234,7 @@ async def health_detailed():
 
 class APIKeyValidationResponse(BaseModel):
     """Response for API key validation."""
+
     valid: bool
     model: str | None = None
     error: str | None = None
@@ -264,6 +277,7 @@ async def validate_api_key():
 
 
 # ── Session endpoints ───────────────────────────────────────────────
+
 
 @router.post("/sessions", response_model=CreateSessionResponse)
 async def create_session(title: str | None = None):
@@ -312,6 +326,7 @@ async def delete_session(session_id: str):
 
 # ── Chat (REST, non-streaming) ──────────────────────────────────────
 
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Send a chat message and get a non-streaming response."""
@@ -330,6 +345,7 @@ async def chat(req: ChatRequest):
 
 
 # ── Chat (REST, streaming via SSE) ──────────────────────────────────
+
 
 @router.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
@@ -362,6 +378,7 @@ async def chat_stream(req: ChatRequest):
 
 # ── Chat (WebSocket) ────────────────────────────────────────────────
 
+
 @router.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket):
     await websocket.accept()
@@ -386,7 +403,12 @@ async def ws_chat(websocket: WebSocket):
             # Stream the response via queue from worker thread
             queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
             asyncio.get_running_loop().run_in_executor(
-                None, _consume_stream, agent, session.id, user_message, queue,
+                None,
+                _consume_stream,
+                agent,
+                session.id,
+                user_message,
+                queue,
             )
 
             while True:
@@ -417,6 +439,7 @@ async def ws_chat(websocket: WebSocket):
 
 
 # ── Knowledge base management ───────────────────────────────────────
+
 
 @router.get("/kb/status", response_model=KBStatusResponse)
 async def kb_status():
@@ -495,7 +518,7 @@ async def kb_upload_file(file: UploadFile = File(...)):
     if len(content) > MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=413,
-            detail=f"File too large: {len(content)} bytes (max {MAX_UPLOAD_SIZE // (1024*1024)} MB)",
+            detail=f"File too large: {len(content)} bytes (max {MAX_UPLOAD_SIZE // (1024 * 1024)} MB)",
         )
 
     # Save uploaded file to the data directory

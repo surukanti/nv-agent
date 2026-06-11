@@ -23,6 +23,7 @@ def _get_nvidia_api_key() -> str:
 @dataclass
 class NVIDIAConfig:
     """NVIDIA API configuration."""
+
     api_key: str = field(default_factory=_get_nvidia_api_key)
     base_url: str = "https://integrate.api.nvidia.com/v1"
     # Default chat model — any model on NVIDIA NIM will work here.
@@ -40,6 +41,7 @@ class NVIDIAConfig:
 @dataclass
 class KBConfig:
     """Knowledge base configuration."""
+
     data_dir: str = field(default_factory=lambda: str(_project_root / "data"))
     index_dir: str = field(default_factory=lambda: str(_project_root / "kb" / "index"))
     chunk_size: int = 512
@@ -50,6 +52,7 @@ class KBConfig:
 @dataclass
 class ServerConfig:
     """Server configuration."""
+
     host: str = "0.0.0.0"
     port: int = 8000
     cors_origins: list = field(default_factory=lambda: ["*"])
@@ -58,6 +61,7 @@ class ServerConfig:
 @dataclass
 class Config:
     """Root configuration."""
+
     nvidia: NVIDIAConfig = field(default_factory=NVIDIAConfig)
     kb: KBConfig = field(default_factory=KBConfig)
     server: ServerConfig = field(default_factory=ServerConfig)

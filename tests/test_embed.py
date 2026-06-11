@@ -1,7 +1,8 @@
 """Unit tests for kb/embed.py — embedding client (mocked API)."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestEmbedTexts:
@@ -9,6 +10,7 @@ class TestEmbedTexts:
 
     def test_empty_list_returns_empty(self):
         from kb.embed import embed_texts
+
         result = embed_texts([])
         assert result == []
 
@@ -120,6 +122,7 @@ class TestGetClient:
 
     def test_creates_client_with_api_key(self):
         import kb.embed
+
         # Reset module-level client
         kb.embed._client = None
 
@@ -134,6 +137,7 @@ class TestGetClient:
 
     def test_raises_on_missing_key(self):
         import kb.embed
+
         kb.embed._client = None
 
         with patch("kb.embed.config") as mock_config:

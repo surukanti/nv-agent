@@ -6,7 +6,6 @@ Configured via NV_AGENT_RATE_LIMIT env var (default: "60/minute").
 
 import time
 from collections import defaultdict
-from typing import Optional
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware

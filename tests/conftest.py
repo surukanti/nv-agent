@@ -82,7 +82,7 @@ def mock_nvidia_api_key():
     """Set a fake NVIDIA API key for tests that need config."""
     with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-test-key-for-testing"}):
         # Re-import config so it picks up the new env var
-        from config import Config, NVIDIAConfig, KBConfig, ServerConfig
+        from config import Config, KBConfig, NVIDIAConfig, ServerConfig
 
         yield Config(
             nvidia=NVIDIAConfig(api_key="nvapi-test-key-for-testing"),
@@ -182,11 +182,11 @@ def app_client(mock_vector_store, mock_session_store, mock_nvidia_api_key):
 @pytest.fixture
 def app_client_with_kb(mock_vector_store, mock_session_store, mock_nvidia_api_key):
     """FastAPI TestClient with a KB that returns search results."""
-    from kb.chunker import Chunk
-    from kb.vector_store import SearchResult
     from agent.rag_agent import RAGAgent
     from chat.app import create_app
     from chat.routes import set_agent, set_store
+    from kb.chunker import Chunk
+    from kb.vector_store import SearchResult
 
     # Configure mock search results
     result = SearchResult(

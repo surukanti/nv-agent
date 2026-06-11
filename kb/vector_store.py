@@ -8,12 +8,13 @@ import faiss
 import numpy as np
 
 from kb.chunker import Chunk
-from kb.embed import embed_texts, embed_query
+from kb.embed import embed_query, embed_texts
 
 
 @dataclass
 class SearchResult:
     """A single retrieval result."""
+
     chunk: Chunk
     score: float
 
@@ -44,7 +45,7 @@ class VectorStore:
         """Load index and metadata from disk if they exist."""
         if os.path.exists(self._index_path()) and os.path.exists(self._meta_path()):
             self.index = faiss.read_index(self._index_path())  # type: ignore[assignment]
-            with open(self._meta_path(), "r") as f:
+            with open(self._meta_path()) as f:
                 raw = json.load(f)
             self.chunks = [
                 Chunk(

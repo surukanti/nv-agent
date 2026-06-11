@@ -4,13 +4,13 @@ import logging
 import os
 import sys
 
-from config import config
-from kb.vector_store import VectorStore
-from kb.ingest import ingest_documents
-from agent.session_store import SessionStore
 from agent.rag_agent import RAGAgent
+from agent.session_store import SessionStore
 from chat.app import create_app
 from chat.routes import set_agent, set_store
+from config import config
+from kb.ingest import ingest_documents
+from kb.vector_store import VectorStore
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,6 +79,7 @@ def main() -> None:
     print(f"[init] Docs at http://{config.server.host}:{config.server.port}/docs")
 
     import uvicorn
+
     uvicorn.run(
         app,
         host=config.server.host,

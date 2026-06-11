@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from openai import OpenAI
 
@@ -19,24 +18,26 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Message:
     """A single conversation message with optional timestamp."""
+
     role: str  # "user" | "assistant" | "system"
     content: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
 class Session:
     """A conversation session with history and metadata."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     history: list[Message] = field(default_factory=list)
     title: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def add(self, role: str, content: str) -> None:
         """Add a message to the session history."""
         self.history.append(Message(role=role, content=content))
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def to_openai_messages(self) -> list[dict]:
         """Convert history to OpenAI message format."""
@@ -49,7 +50,7 @@ class Session:
     def clear_history(self) -> None:
         """Clear all conversation history."""
         self.history = []
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
 
 RAG_SYSTEM_PROMPT = """\
@@ -69,23 +70,26 @@ general answer but clearly note that it is not from the knowledge base.
 
 class RAGAgentError(Exception):
     """Base exception for RAG agent errors."""
+
     pass
 
 
 class SessionNotFoundError(RAGAgentError):
     """Raised when a session ID is not found."""
+
     pass
 
 
 class LLMError(RAGAgentError):
     """Raised when the LLM API call fails."""
+
     pass
 
 
 class RAGAgent:
     """Retrieval-Augmented Generation agent backed by NVIDIA LLM + FAISS KB."""
 
-    def __init__(self, store: VectorStore, session_store: Optional["SessionStore"] = None):
+    def __init__(self, store: VectorStore, session_store: SessionStore | None = None):
         self.store = store
         self.sessions: dict[str, Session] = {}
         self._client: OpenAI | None = None
@@ -202,7 +206,9 @@ class RAGAgent:
         context = self._retrieve_context(user_query)
 
         # System prompt with injected context
-        system_content = f"{RAG_SYSTEM_PROMPT}\n\n--- Retrieved Knowledge Base Context ---\n\n{context}"
+        system_content = (
+            f"{RAG_SYSTEM_PROMPT}\n\n--- Retrieved Knowledge Base Context ---\n\n{context}"
+        )
 
         messages = [{"role": "system", "content": system_content}]
         # Add conversation history (excluding previous system messages)
@@ -282,7 +288,9 @@ class RAGAgent:
                 delta = chunk.choices[0].delta
 
                 # Nemotron reasoning/thinking tokens (if present)
-                reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "thinking", None)
+                reasoning = getattr(delta, "reasoning_content", None) or getattr(
+                    delta, "thinking", None
+                )
                 if reasoning is not None:
                     yield {"type": "reasoning", "content": reasoning}
 

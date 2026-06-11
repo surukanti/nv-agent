@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+*.egg-info
+dist
+build
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Environment & secrets
+.env
+.env.*
+
+# Project data (mounted as volumes at runtime)
+data/
+kb/index/
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# CI/CD
+.github/
+
+# Claude Code
+.claude/
+
+# Dev tooling
+.pre-commit-config.yaml
+pyproject.toml
+requirements-dev.txt

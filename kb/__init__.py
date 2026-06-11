@@ -1,14 +1,14 @@
 """Knowledge base layer — document ingestion, embedding, storage, and retrieval."""
 
-from kb.vector_store import VectorStore
-from kb.ingest import ingest_documents, ingest_text, ingest_file
 from kb.chunker import Chunk, chunk_text
+from kb.ingest import ingest_documents, ingest_file, ingest_text
+from kb.vector_store import VectorStore
 
 __all__ = [
-    "VectorStore",
-    "ingest_documents",
-    "ingest_text",
-    "ingest_file",
     "Chunk",
+    "VectorStore",
     "chunk_text",
+    "ingest_documents",
+    "ingest_file",
+    "ingest_text",
 ]

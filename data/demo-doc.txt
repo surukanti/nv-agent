@@ -1,0 +1,1 @@
+NV-Agent supports multiple file formats including text, markdown, PDF, and DOCX files for document ingestion.

@@ -3,9 +3,8 @@
 import json
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from agent.rag_agent import Message, Session
 
@@ -59,18 +58,18 @@ class SessionStore:
             try:
                 session.created_at = datetime.fromisoformat(created_at)
             except (ValueError, TypeError):
-                session.created_at = datetime.now(timezone.utc)
+                session.created_at = datetime.now(UTC)
         else:
-            session.created_at = datetime.now(timezone.utc)
+            session.created_at = datetime.now(UTC)
 
         updated_at = data.get("updated_at")
         if updated_at:
             try:
                 session.updated_at = datetime.fromisoformat(updated_at)
             except (ValueError, TypeError):
-                session.updated_at = datetime.now(timezone.utc)
+                session.updated_at = datetime.now(UTC)
         else:
-            session.updated_at = datetime.now(timezone.utc)
+            session.updated_at = datetime.now(UTC)
 
         session.history = []
         for m in data.get("history", []):
@@ -91,20 +90,22 @@ class SessionStore:
         """Persist a single session to disk."""
         # Ensure timestamps are set
         if session.created_at is None:
-            session.created_at = datetime.now(timezone.utc)
-        session.updated_at = datetime.now(timezone.utc)
+            session.created_at = datetime.now(UTC)
+        session.updated_at = datetime.now(UTC)
 
         with self._lock:
             path = self._session_path(session.id)
             tmp = path.with_suffix(".json.tmp")
             try:
-                tmp.write_text(json.dumps(self._session_to_dict(session), indent=2), encoding="utf-8")
+                tmp.write_text(
+                    json.dumps(self._session_to_dict(session), indent=2), encoding="utf-8"
+                )
                 tmp.replace(path)  # atomic on POSIX
             except OSError as exc:
                 logger.error("[session_store] failed to save session %s: %s", session.id, exc)
                 raise
 
-    def load(self, session_id: str) -> Optional[Session]:
+    def load(self, session_id: str) -> Session | None:
         """Load a session by ID. Returns None if not found."""
         path = self._session_path(session_id)
         if not path.exists():
@@ -146,7 +147,7 @@ class SessionStore:
                 sessions[sid] = session
         return sessions
 
-    def get_session_info(self, session_id: str) -> Optional[dict]:
+    def get_session_info(self, session_id: str) -> dict | None:
         """Get metadata about a session without loading full history."""
         path = self._session_path(session_id)
         if not path.exists():

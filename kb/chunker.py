@@ -7,6 +7,7 @@ from dataclasses import dataclass
 @dataclass
 class Chunk:
     """A single text chunk with metadata."""
+
     text: str
     source: str
     chunk_index: int
@@ -15,7 +16,7 @@ class Chunk:
 
 
 # Pre-compile regex for sentence splitting performance
-_SENTENCE_PATTERN = re.compile(r'(?<=[.!?])\s+(?=[A-Z])')
+_SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
 
 
 def _split_into_sentences(text: str) -> list[str]:
@@ -27,7 +28,7 @@ def _split_into_sentences(text: str) -> list[str]:
 
 def _split_into_paragraphs(text: str) -> list[str]:
     """Split text into paragraphs (separated by blank lines)."""
-    paragraphs = text.split('\n\n')
+    paragraphs = text.split("\n\n")
     return [p.strip() for p in paragraphs if p.strip()]
 
 
@@ -45,13 +46,13 @@ def _find_word_boundary(text: str, pos: int, direction: int = -1) -> int:
     if direction == -1:
         # Look backwards
         for i in range(pos, max(0, pos - 50), -1):
-            if text[i] in (' ', '\n', '\t'):
+            if text[i] in (" ", "\n", "\t"):
                 return i + 1
         return max(0, pos - 50)
     else:
         # Look forwards
         for i in range(pos, min(len(text), pos + 50)):
-            if text[i] in (' ', '\n', '\t'):
+            if text[i] in (" ", "\n", "\t"):
                 return i
         return min(len(text), pos + 50)
 
@@ -98,14 +99,14 @@ def chunk_text(
         if window_end < len(text):
             # Look for \n\n within the window
             search_text = text[char_pos:window_end]
-            last_para = search_text.rfind('\n\n')
+            last_para = search_text.rfind("\n\n")
             if last_para != -1 and last_para > chunk_size // 4:
                 window_end = char_pos + last_para
             else:
                 # Strategy 2: Try sentence boundary
                 # Search backwards from the end of the window
                 search_end = min(window_end, char_pos + chunk_size)
-                for sep in ['. ', '? ', '! ', '。', '？', '！']:
+                for sep in [". ", "? ", "! ", "。", "？", "！"]:
                     last_sep = text[char_pos:search_end].rfind(sep)
                     if last_sep != -1 and last_sep > chunk_size // 4:
                         window_end = char_pos + last_sep + len(sep)
@@ -127,7 +128,7 @@ def chunk_text(
         if len(chunk_content) < min_chunk_size and chunks:
             # Merge with previous chunk
             prev = chunks[-1]
-            merged_text = text[prev.start_char:window_end].strip()
+            merged_text = text[prev.start_char : window_end].strip()
             chunks[-1] = Chunk(
                 text=merged_text,
                 source=source,
@@ -136,13 +137,15 @@ def chunk_text(
                 end_char=window_end,
             )
         else:
-            chunks.append(Chunk(
-                text=chunk_content,
-                source=source,
-                chunk_index=idx,
-                start_char=char_pos,
-                end_char=window_end,
-            ))
+            chunks.append(
+                Chunk(
+                    text=chunk_content,
+                    source=source,
+                    chunk_index=idx,
+                    start_char=char_pos,
+                    end_char=window_end,
+                )
+            )
             idx += 1
 
         # Advance with overlap
@@ -192,16 +195,18 @@ def chunk_text_preserving_structure(
 
         # If adding this paragraph would exceed chunk_size, finalize current chunk
         if current_chunk and current_size + para_size > chunk_size:
-            combined_text = '\n\n'.join(current_chunk).strip()
+            combined_text = "\n\n".join(current_chunk).strip()
             if combined_text:
                 chunk_len = len(combined_text)
-                chunks.append(Chunk(
-                    text=combined_text,
-                    source=source,
-                    chunk_index=idx,
-                    start_char=char_pos,
-                    end_char=char_pos + chunk_len,
-                ))
+                chunks.append(
+                    Chunk(
+                        text=combined_text,
+                        source=source,
+                        chunk_index=idx,
+                        start_char=char_pos,
+                        end_char=char_pos + chunk_len,
+                    )
+                )
                 char_pos += chunk_len
                 idx += 1
             current_chunk = []
@@ -211,25 +216,25 @@ def chunk_text_preserving_structure(
         if para_size > chunk_size:
             # Finalize any pending chunk first
             if current_chunk:
-                combined_text = '\n\n'.join(current_chunk).strip()
+                combined_text = "\n\n".join(current_chunk).strip()
                 if combined_text:
                     chunk_len = len(combined_text)
-                    chunks.append(Chunk(
-                        text=combined_text,
-                        source=source,
-                        chunk_index=idx,
-                        start_char=char_pos,
-                        end_char=char_pos + chunk_len,
-                    ))
+                    chunks.append(
+                        Chunk(
+                            text=combined_text,
+                            source=source,
+                            chunk_index=idx,
+                            start_char=char_pos,
+                            end_char=char_pos + chunk_len,
+                        )
+                    )
                     char_pos += chunk_len
                     idx += 1
                 current_chunk = []
                 current_size = 0
 
             # Chunk the oversized paragraph
-            sub_chunks = chunk_text(
-                paragraph, source, chunk_size, chunk_overlap
-            )
+            sub_chunks = chunk_text(paragraph, source, chunk_size, chunk_overlap)
             for sc in sub_chunks:
                 sc.chunk_index = idx
                 chunks.append(sc)
@@ -241,14 +246,16 @@ def chunk_text_preserving_structure(
 
     # Finalize remaining chunk
     if current_chunk:
-        chunk_text_str = '\n\n'.join(current_chunk).strip()
+        chunk_text_str = "\n\n".join(current_chunk).strip()
         if chunk_text_str:
-            chunks.append(Chunk(
-                text=chunk_text_str,
-                source=source,
-                chunk_index=idx,
-                start_char=char_pos,
-                end_char=char_pos + len(chunk_text_str),
-            ))
+            chunks.append(
+                Chunk(
+                    text=chunk_text_str,
+                    source=source,
+                    chunk_index=idx,
+                    start_char=char_pos,
+                    end_char=char_pos + len(chunk_text_str),
+                )
+            )
 
     return chunks

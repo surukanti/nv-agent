@@ -6,12 +6,9 @@ When not set, auth is disabled (open access, suitable for local dev).
 """
 
 import os
-from typing import Optional
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-
-from config import config
 
 
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
@@ -25,7 +22,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
       - Query param: ?api_key=<your-key>
     """
 
-    def __init__(self, app, auth_key: Optional[str] = None):
+    def __init__(self, app, auth_key: str | None = None):
         super().__init__(app)
         self.auth_key = auth_key
 
@@ -58,7 +55,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def get_auth_key() -> Optional[str]:
+def get_auth_key() -> str | None:
     """Resolve the auth key from environment variables.
 
     Checks NV_AGENT_AUTH_KEY first, then AUTH_KEY.

@@ -2,8 +2,8 @@
 
 from kb.chunker import chunk_text, chunk_text_preserving_structure
 
-
 # ── chunk_text() basic behavior ─────────────────────────────
+
 
 class TestChunkTextBasic:
     """Tests for the core chunk_text() function."""
@@ -45,6 +45,7 @@ class TestChunkTextBasic:
 
 # ── Paragraph boundary splitting ────────────────────────────
 
+
 class TestParagraphBoundary:
     """Tests for paragraph-aware chunking."""
 
@@ -67,12 +68,15 @@ class TestParagraphBoundary:
 
 # ── Sentence boundary splitting ─────────────────────────────
 
+
 class TestSentenceBoundary:
     """Tests for sentence-aware chunking."""
 
     def test_splits_at_sentence_boundary(self):
         # Long text with clear sentence boundaries
-        text = "First sentence here with enough words to exceed one hundred characters in total. " * 6
+        text = (
+            "First sentence here with enough words to exceed one hundred characters in total. " * 6
+        )
         result = chunk_text(text, "test.md", chunk_size=150, chunk_overlap=0, min_chunk_size=50)
         assert len(result) >= 2
 
@@ -86,6 +90,7 @@ class TestSentenceBoundary:
 
 
 # ── Overlap behavior ────────────────────────────────────────
+
 
 class TestOverlap:
     """Tests for chunk overlap."""
@@ -107,6 +112,7 @@ class TestOverlap:
 
 # ── Min chunk size merging ─────────────────────────────────
 
+
 class TestMinChunkSize:
     """Tests for merging tiny chunks with their predecessor."""
 
@@ -127,6 +133,7 @@ class TestMinChunkSize:
 
 
 # ── chunk_text_preserving_structure() ───────────────────────
+
 
 class TestPreservingStructure:
     """Tests for the structure-preserving chunker variant."""

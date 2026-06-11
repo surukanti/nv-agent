@@ -2,7 +2,6 @@
 
 import os
 
-import pytest
 from agent.rag_agent import Message, Session
 from agent.session_store import SessionStore
 
