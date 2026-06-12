@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.mark.unit
 class TestEmbedTexts:
     """Tests for embed_texts() with mocked NVIDIA API."""
 

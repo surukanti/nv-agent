@@ -2,10 +2,13 @@
 
 import os
 
+import pytest
+
 from agent.rag_agent import Message, Session
 from agent.session_store import SessionStore
 
 
+@pytest.mark.unit
 class TestSessionCreation:
     """Tests for Session and Message data models."""
 

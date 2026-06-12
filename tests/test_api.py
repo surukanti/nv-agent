@@ -2,9 +2,12 @@
 
 from unittest.mock import patch
 
+import pytest
+
 # ── Health endpoint ──────────────────────────────────────────
 
 
+@pytest.mark.api
 class TestHealthEndpoint:
     """Tests for GET /api/health."""
 
@@ -19,6 +22,7 @@ class TestHealthEndpoint:
 # ── Session endpoints ───────────────────────────────────────
 
 
+@pytest.mark.api
 class TestSessionEndpoints:
     """Tests for session CRUD via REST API."""
 
@@ -79,6 +83,7 @@ class TestSessionEndpoints:
 # ── Chat endpoint (REST, non-streaming) ─────────────────────
 
 
+@pytest.mark.api
 class TestChatEndpoint:
     """Tests for POST /api/chat (non-streaming)."""
 
@@ -109,6 +114,7 @@ class TestChatEndpoint:
 # ── Chat streaming endpoint (SSE) ───────────────────────────
 
 
+@pytest.mark.api
 class TestChatStreamEndpoint:
     """Tests for POST /api/chat/stream (SSE)."""
 
@@ -135,6 +141,7 @@ class TestChatStreamEndpoint:
 # ── Knowledge Base endpoints ────────────────────────────────
 
 
+@pytest.mark.api
 class TestKBEndpoints:
     """Tests for knowledge base management endpoints."""
 
@@ -184,6 +191,7 @@ class TestKBEndpoints:
 # ── Upload endpoint ─────────────────────────────────────────
 
 
+@pytest.mark.api
 class TestUploadEndpoint:
     """Tests for POST /api/kb/upload (multipart file upload)."""
 
@@ -220,6 +228,7 @@ class TestUploadEndpoint:
 # ── Filename sanitization ───────────────────────────────────
 
 
+@pytest.mark.api
 class TestFilenameSanitization:
     """Tests for _sanitize_filename() in routes.py."""
 

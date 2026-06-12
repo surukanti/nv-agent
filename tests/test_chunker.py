@@ -1,10 +1,13 @@
 """Unit tests for kb/chunker.py — text splitting logic."""
 
+import pytest
+
 from kb.chunker import chunk_text, chunk_text_preserving_structure
 
 # ── chunk_text() basic behavior ─────────────────────────────
 
 
+@pytest.mark.unit
 class TestChunkTextBasic:
     """Tests for the core chunk_text() function."""
 

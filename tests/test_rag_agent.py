@@ -12,6 +12,7 @@ from agent.rag_agent import (
 )
 
 
+@pytest.mark.unit
 class TestExceptionHierarchy:
     """Tests for the custom exception hierarchy."""
 

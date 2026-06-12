@@ -17,6 +17,7 @@ from kb.ingest import (
 )
 
 
+@pytest.mark.unit
 class TestReaders:
     """Tests for file reader functions."""
 
