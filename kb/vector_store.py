@@ -45,7 +45,7 @@ class VectorStore:
         """Load index and metadata from disk if they exist."""
         if os.path.exists(self._index_path()) and os.path.exists(self._meta_path()):
             self.index = faiss.read_index(self._index_path())  # type: ignore[assignment]
-            with open(self._meta_path()) as f:
+            with open(self._meta_path(), encoding="utf-8") as f:
                 raw = json.load(f)
             self.chunks = [
                 Chunk(
@@ -64,7 +64,7 @@ class VectorStore:
     def save(self) -> None:
         """Persist index and metadata to disk."""
         faiss.write_index(self.index, self._index_path())  # type: ignore[arg-type]
-        with open(self._meta_path(), "w") as f:
+        with open(self._meta_path(), "w", encoding="utf-8") as f:
             json.dump(
                 [
                     {
@@ -115,7 +115,7 @@ class VectorStore:
         scores, indices = self.index.search(q, min(top_k, len(self.chunks)))
 
         results: list[SearchResult] = []
-        for score, idx in zip(scores[0], indices[0]):
+        for score, idx in zip(scores[0], indices[0], strict=False):
             if idx < 0 or idx >= len(self.chunks):
                 continue
             results.append(SearchResult(chunk=self.chunks[idx], score=float(score)))

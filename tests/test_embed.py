@@ -12,7 +12,7 @@ class TestEmbedTexts:
         from kb.embed import embed_texts
 
         result = embed_texts([])
-        assert result == []
+        assert not result
 
     @patch("kb.embed._get_client")
     def test_single_text_embedding(self, mock_get_client, mock_embedding_response):
@@ -106,7 +106,7 @@ class TestEmbedQuery:
 
         mock_embed.side_effect = RuntimeError("API down")
         result = embed_query("test query")
-        assert result == []
+        assert not result
 
     @patch("kb.embed.embed_texts")
     def test_empty_result_returns_empty_list(self, mock_embed):
@@ -114,7 +114,7 @@ class TestEmbedQuery:
 
         mock_embed.return_value = []
         result = embed_query("test query")
-        assert result == []
+        assert not result
 
 
 class TestGetClient:

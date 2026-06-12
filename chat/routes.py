@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -15,7 +17,9 @@ from pydantic import BaseModel
 
 from agent.rag_agent import LLMError, RAGAgent, SessionNotFoundError
 from kb.ingest import ingest_documents, ingest_file, ingest_text
-from kb.vector_store import VectorStore
+
+if TYPE_CHECKING:
+    from kb.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -302,10 +306,10 @@ async def get_session_history(session_id: str, limit: int = 50):
     try:
         history = agent.get_session_history(session_id, limit=limit)
     except SessionNotFoundError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Session not found") from None
     except Exception as exc:
         logger.error("[routes] failed to get session history: %s", exc)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise HTTPException(status_code=500, detail="Internal error") from exc
 
     session = agent.get_session(session_id)
     return SessionHistoryResponse(
@@ -334,13 +338,13 @@ async def chat(req: ChatRequest):
     try:
         answer = await _run_sync(agent.chat, req.session_id, req.message)
     except SessionNotFoundError:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Session not found") from None
     except LLMError as exc:
         logger.error("[routes] LLM error: %s", exc)
-        raise HTTPException(status_code=502, detail="LLM service error")
+        raise HTTPException(status_code=502, detail="LLM service error") from exc
     except Exception as exc:
         logger.error("[routes] unexpected chat error: %s", exc)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise HTTPException(status_code=500, detail="Internal error") from exc
     return ChatResponse(session_id=req.session_id, answer=answer)
 
 
@@ -459,7 +463,7 @@ async def kb_ingest_text(req: IngestTextRequest):
         n = await _run_sync(ingest_text, store, req.text, req.source)
     except Exception as exc:
         logger.error("[routes] text ingestion failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Ingestion failed")
+        raise HTTPException(status_code=500, detail="Ingestion failed") from exc
     return IngestResponse(chunks_added=n)
 
 
@@ -471,7 +475,7 @@ async def kb_ingest_dir():
         n = await _run_sync(ingest_documents, store)
     except Exception as exc:
         logger.error("[routes] directory ingestion failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Directory ingestion failed")
+        raise HTTPException(status_code=500, detail="Directory ingestion failed") from exc
     return {"chunks_added": n, "data_dir": str(store.index_dir)}
 
 
@@ -483,7 +487,7 @@ async def kb_ingest_file(req: IngestFileRequest):
         n = await _run_sync(ingest_file, store, req.file_path)
     except Exception as exc:
         logger.error("[routes] file ingestion failed: %s", exc)
-        raise HTTPException(status_code=500, detail=f"File ingestion failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"File ingestion failed: {exc}") from exc
     return IngestResponse(chunks_added=n)
 
 
@@ -532,7 +536,7 @@ async def kb_upload_file(file: UploadFile = File(...)):
         logger.info("[upload] saved %s (%d bytes)", safe_name, len(content))
     except Exception as exc:
         logger.error("[upload] failed to save file: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to save file")
+        raise HTTPException(status_code=500, detail="Failed to save file") from exc
 
     # Ingest the saved file
     try:
@@ -540,11 +544,9 @@ async def kb_upload_file(file: UploadFile = File(...)):
     except Exception as exc:
         logger.error("[upload] ingestion failed for %s: %s", safe_name, exc)
         # Clean up the file if ingestion failed
-        try:
+        with contextlib.suppress(OSError):
             os.remove(save_path)
-        except OSError:
-            pass
-        raise HTTPException(status_code=500, detail="Ingestion failed")
+        raise HTTPException(status_code=500, detail="Ingestion failed") from exc
 
     return IngestResponse(chunks_added=n)
 
@@ -557,5 +559,5 @@ async def kb_reset():
         store.reset()
     except Exception as exc:
         logger.error("[routes] KB reset failed: %s", exc)
-        raise HTTPException(status_code=500, detail="KB reset failed")
+        raise HTTPException(status_code=500, detail="KB reset failed") from exc
     return {"detail": "Knowledge base cleared"}

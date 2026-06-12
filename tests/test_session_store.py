@@ -139,7 +139,7 @@ class TestSessionStorePersistence:
 
         # Write a corrupt JSON file
         corrupt_path = os.path.join(session_dir, "corrupt-session.json")
-        with open(corrupt_path, "w") as f:
+        with open(corrupt_path, "w", encoding="utf-8") as f:
             f.write("{ invalid json")
 
         sessions = store.load_all()

@@ -114,7 +114,7 @@ class TestIngestFile:
 
         # Create a text file
         file_path = os.path.join(tmp_dir, "test.txt")
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write("This is a test document with some content for ingestion. " * 10)
 
         index_dir = os.path.join(tmp_dir, "index")
@@ -147,9 +147,9 @@ class TestIngestDocuments:
         os.makedirs(data_dir)
 
         # Create some text files
-        with open(os.path.join(data_dir, "doc1.txt"), "w") as f:
+        with open(os.path.join(data_dir, "doc1.txt"), "w", encoding="utf-8") as f:
             f.write("Document one has some content for testing the ingestion pipeline. " * 10)
-        with open(os.path.join(data_dir, "doc2.md"), "w") as f:
+        with open(os.path.join(data_dir, "doc2.md"), "w", encoding="utf-8") as f:
             f.write(
                 "# Document Two\n\nThis is markdown content with enough text to be chunked properly. "
                 * 10
@@ -170,11 +170,11 @@ class TestIngestDocuments:
         os.makedirs(sessions_dir)
 
         # Create a session file (should be skipped)
-        with open(os.path.join(sessions_dir, "session.json"), "w") as f:
+        with open(os.path.join(sessions_dir, "session.json"), "w", encoding="utf-8") as f:
             f.write('{"id": "test"}')
 
         # Create a real document
-        with open(os.path.join(data_dir, "doc.txt"), "w") as f:
+        with open(os.path.join(data_dir, "doc.txt"), "w", encoding="utf-8") as f:
             f.write("Real document content that is long enough. " * 10)
 
         index_dir = os.path.join(tmp_dir, "index")

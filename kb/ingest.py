@@ -43,10 +43,10 @@ def _read_pdf(path: Path) -> str:
     """Extract text from a PDF file using PyPDF2."""
     try:
         from PyPDF2 import PdfReader
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
             "PyPDF2 is required for PDF support. Install it with: pip install PyPDF2>=3.0.0"
-        )
+        ) from exc
 
     reader = PdfReader(str(path))
     parts = []
@@ -74,10 +74,10 @@ def _read_docx(path: Path) -> str:
     """Extract text from a DOCX file using python-docx."""
     try:
         from docx import Document
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
             "python-docx is required for DOCX support. Install it with: pip install python-docx>=1.1.0"
-        )
+        ) from exc
 
     doc = Document(str(path))
     parts = []
@@ -113,8 +113,6 @@ _READERS[".docx"] = _read_docx
 class DocumentIngestionError(Exception):
     """Raised when a document cannot be ingested."""
 
-    pass
-
 
 def ingest_documents(
     store: VectorStore,
@@ -147,12 +145,12 @@ def ingest_documents(
     error_count = 0
 
     # Known directories to skip (session storage, etc.)
-    _SKIP_DIRS = {"sessions", ".git", ".venv", "__pycache__", ".claude"}
+    skip_dirs = {"sessions", ".git", ".venv", "__pycache__", ".claude"}
 
     for file_path in sorted(root.rglob("*")):
         if file_path.is_dir():
             continue
-        if any(part in _SKIP_DIRS for part in file_path.parts):
+        if any(part in skip_dirs for part in file_path.parts):
             continue
 
         ext = file_path.suffix.lower()
@@ -268,9 +266,9 @@ def ingest_file(
     try:
         text = reader(path)
     except ImportError as exc:
-        raise DocumentIngestionError(f"Missing dependency for {ext}: {exc}")
+        raise DocumentIngestionError(f"Missing dependency for {ext}: {exc}") from exc
     except Exception as exc:
-        raise DocumentIngestionError(f"Failed to read {file_path}: {exc}")
+        raise DocumentIngestionError(f"Failed to read {file_path}: {exc}") from exc
 
     if not text or not text.strip():
         raise DocumentIngestionError(f"Empty content from: {file_path}")

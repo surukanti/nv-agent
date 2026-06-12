@@ -10,11 +10,11 @@ class TestChunkTextBasic:
 
     def test_empty_text_returns_empty(self):
         result = chunk_text("", "test")
-        assert result == []
+        assert not result
 
     def test_whitespace_only_returns_empty(self):
         result = chunk_text("   \n\n   \t  ", "test")
-        assert result == []
+        assert not result
 
     def test_short_text_single_chunk(self, sample_text):
         # Use chunk_size larger than the text
@@ -151,8 +151,8 @@ class TestPreservingStructure:
 
     def test_empty_text_returns_empty(self):
         result = chunk_text_preserving_structure("", "test.md")
-        assert result == []
+        assert not result
 
     def test_whitespace_returns_empty(self):
         result = chunk_text_preserving_structure("   \n\n   ", "test.md")
-        assert result == []
+        assert not result

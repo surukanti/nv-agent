@@ -6,11 +6,15 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from openai import OpenAI
 
 from config import config
-from kb.vector_store import VectorStore
+
+if TYPE_CHECKING:
+    from agent.session_store import SessionStore
+    from kb.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -71,19 +75,13 @@ general answer but clearly note that it is not from the knowledge base.
 class RAGAgentError(Exception):
     """Base exception for RAG agent errors."""
 
-    pass
-
 
 class SessionNotFoundError(RAGAgentError):
     """Raised when a session ID is not found."""
 
-    pass
-
 
 class LLMError(RAGAgentError):
     """Raised when the LLM API call fails."""
-
-    pass
 
 
 class RAGAgent:
@@ -243,7 +241,7 @@ class RAGAgent:
                 extra_body=self._extra_body(),
             )
         except Exception as exc:
-            raise LLMError(f"LLM API call failed: {exc}")
+            raise LLMError(f"LLM API call failed: {exc}") from exc
 
         answer = completion.choices[0].message.content or ""
         session.add("assistant", answer)
@@ -278,7 +276,7 @@ class RAGAgent:
                 extra_body=self._extra_body(),
             )
         except Exception as exc:
-            raise LLMError(f"LLM API stream failed: {exc}")
+            raise LLMError(f"LLM API stream failed: {exc}") from exc
 
         full_response: list[str] = []
         try:

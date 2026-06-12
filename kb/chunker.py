@@ -49,12 +49,12 @@ def _find_word_boundary(text: str, pos: int, direction: int = -1) -> int:
             if text[i] in (" ", "\n", "\t"):
                 return i + 1
         return max(0, pos - 50)
-    else:
-        # Look forwards
-        for i in range(pos, min(len(text), pos + 50)):
-            if text[i] in (" ", "\n", "\t"):
-                return i
-        return min(len(text), pos + 50)
+
+    # Look forwards
+    for i in range(pos, min(len(text), pos + 50)):
+        if text[i] in (" ", "\n", "\t"):
+            return i
+    return min(len(text), pos + 50)
 
 
 def chunk_text(
@@ -106,7 +106,7 @@ def chunk_text(
                 # Strategy 2: Try sentence boundary
                 # Search backwards from the end of the window
                 search_end = min(window_end, char_pos + chunk_size)
-                for sep in [". ", "? ", "! ", "。", "？", "！"]:
+                for sep in [". ", "? ", "! ", "。", "？", "！"]:  # noqa: RUF001
                     last_sep = text[char_pos:search_end].rfind(sep)
                     if last_sep != -1 and last_sep > chunk_size // 4:
                         window_end = char_pos + last_sep + len(sep)
