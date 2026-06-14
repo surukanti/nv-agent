@@ -14,7 +14,7 @@ from config import config
 
 if TYPE_CHECKING:
     from agent.session_store import SessionStore
-    from kb.vector_store import VectorStore
+    from kb.vector_store_base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +85,9 @@ class LLMError(RAGAgentError):
 
 
 class RAGAgent:
-    """Retrieval-Augmented Generation agent backed by NVIDIA LLM + FAISS KB."""
+    """Retrieval-Augmented Generation agent backed by NVIDIA LLM + vector store."""
 
-    def __init__(self, store: VectorStore, session_store: SessionStore | None = None):
+    def __init__(self, store: "VectorStoreBase", session_store: SessionStore | None = None):
         self.store = store
         self.sessions: dict[str, Session] = {}
         self._client: OpenAI | None = None

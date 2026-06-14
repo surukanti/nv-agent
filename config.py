@@ -47,6 +47,41 @@ class KBConfig:
     chunk_size: int = 512
     chunk_overlap: int = 64
     top_k: int = 5
+    # Vector store backend: "faiss", "chromadb", "qdrant"
+    vector_store: str = "faiss"
+    # Backend-specific options
+    vector_store_options: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Load vector store config from environment variables."""
+        import os
+
+        # Read backend from env
+        env_backend = os.environ.get("NV_AGENT_VECTOR_STORE")
+        if env_backend:
+            self.vector_store = env_backend.lower()
+
+        # Read backend-specific options from env
+        if self.vector_store == "chromadb":
+            self.vector_store_options = {
+                "collection_name": os.environ.get(
+                    "NV_AGENT_CHROMADB_COLLECTION", "nv_agent_kb"
+                ),
+                "persist_directory": os.environ.get(
+                    "NV_AGENT_CHROMADB_PERSIST_DIR"
+                ),
+            }
+        elif self.vector_store == "qdrant":
+            port_str = os.environ.get("NV_AGENT_QDRANT_PORT")
+            self.vector_store_options = {
+                "collection_name": os.environ.get(
+                    "NV_AGENT_QDRANT_COLLECTION", "nv_agent_kb"
+                ),
+                "host": os.environ.get("NV_AGENT_QDRANT_HOST"),
+                "port": int(port_str) if port_str else None,
+                "api_key": os.environ.get("NV_AGENT_QDRANT_API_KEY"),
+                "path": os.environ.get("NV_AGENT_QDRANT_PATH"),
+            }
 
 
 @dataclass

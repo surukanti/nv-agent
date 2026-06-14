@@ -12,3 +12,11 @@ websockets>=12.0
 # Document processing
 PyPDF2>=3.0.0
 python-docx>=1.1.0
+
+# Optional: ChromaDB vector store
+# Install with: pip install chromadb
+# chromadb>=1.0.0
+
+# Optional: Qdrant vector store
+# Install with: pip install qdrant-client
+# qdrant-client>=1.12.0

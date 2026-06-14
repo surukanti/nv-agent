@@ -2,12 +2,39 @@
 (function () {
 "use strict";
 
+// ── Auth key storage ─────────────────────────────────────
+const AUTH_KEY_STORAGE = "nv_agent_auth_key";
+
+function getStoredAuthKey() {
+  return localStorage.getItem(AUTH_KEY_STORAGE);
+}
+
+function setStoredAuthKey(key, remember) {
+  if (remember) {
+    localStorage.setItem(AUTH_KEY_STORAGE, key);
+  } else {
+    sessionStorage.setItem(AUTH_KEY_STORAGE, key);
+  }
+}
+
+function clearStoredAuthKey() {
+  localStorage.removeItem(AUTH_KEY_STORAGE);
+  sessionStorage.removeItem(AUTH_KEY_STORAGE);
+}
+
+function getAuthKey() {
+  // Check sessionStorage first (non-persistent), then localStorage
+  return sessionStorage.getItem(AUTH_KEY_STORAGE) || localStorage.getItem(AUTH_KEY_STORAGE) || "";
+}
+
 // ── State ──────────────────────────────────────────────
 const state = {
   sessionId: null,
   ws: null,
   streaming: false,
   sessions: [],
+  authRequired: false,
+  authKey: "",
 };
 
 // ── DOM refs ───────────────────────────────────────────
@@ -36,6 +63,12 @@ const dom = {
   sendBtn: $("#send-btn"),
   typingIndicator: $("#typing-indicator"),
   toastContainer: $("#toast-container"),
+  // Auth
+  loginModal: $("#login-modal"),
+  loginForm: $("#login-form"),
+  loginApiKey: $("#login-api-key"),
+  loginRemember: $("#login-remember"),
+  loginSubmitBtn: $("#login-submit-btn"),
 };
 
 // ── API helpers ────────────────────────────────────────
@@ -46,9 +79,22 @@ async function apiFetch(path, opts = {}) {
   if (!(opts.body instanceof FormData)) {
     opts.headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
   }
+
+  // Add auth key if available
+  const authKey = getAuthKey();
+  if (authKey) {
+    opts.headers = { "X-API-Key": authKey, ...(opts.headers || {}) };
+  }
+
   const res = await fetch(API + path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
+    // If 401, auth key might be invalid/expired
+    if (res.status === 401) {
+      clearStoredAuthKey();
+      state.authKey = "";
+      showLoginModal();
+    }
     throw new Error(err.detail || res.statusText);
   }
   return res.json();
@@ -237,8 +283,15 @@ function connectWS() {
     state.ws = null;
   }
 
+  // If auth is required but no key, don't connect
+  if (state.authRequired && !state.authKey) {
+    showLoginModal();
+    return;
+  }
+
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${proto}//${location.host}/api/ws/chat`;
+  const authKey = getAuthKey();
+  const url = `${proto}//${location.host}/api/ws/chat${authKey ? "?api_key=" + encodeURIComponent(authKey) : ""}`;
 
   const ws = new WebSocket(url);
   let streamEl = null;
@@ -342,10 +395,16 @@ async function sendViaSSE(text) {
   let streamText = "";
   let reasoningText = "";
 
+  const authKey = getAuthKey();
+  const headers = { "Content-Type": "application/json" };
+  if (authKey) {
+    headers["X-API-Key"] = authKey;
+  }
+
   try {
     const res = await fetch(API + "/chat/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ session_id: state.sessionId, message: text }),
     });
 
@@ -513,6 +572,68 @@ function escHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// ── Auth UI ────────────────────────────────────────────
+function showLoginModal() {
+  dom.loginModal.style.display = "flex";
+  dom.loginApiKey.value = "";
+  dom.loginApiKey.focus();
+}
+
+function hideLoginModal() {
+  dom.loginModal.style.display = "none";
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  const key = dom.loginApiKey.value.trim();
+  const remember = dom.loginRemember.checked;
+
+  if (!key) {
+    toast("Please enter an API key", "error");
+    return;
+  }
+
+  dom.loginSubmitBtn.disabled = true;
+  dom.loginSubmitBtn.textContent = "Verifying…";
+
+  try {
+    // Test the key by calling a protected endpoint
+    await apiFetch("/health/detailed", { method: "GET" });
+    // If successful, store the key
+    setStoredAuthKey(key, remember);
+    state.authKey = key;
+    state.authRequired = true;
+    hideLoginModal();
+    toast("Authentication successful", "success");
+    // Re-initialize
+    refreshKBStatus();
+    loadPersistedSessions();
+    connectWS();
+  } catch (e) {
+    toast("Invalid API key: " + e.message, "error");
+  } finally {
+    dom.loginSubmitBtn.disabled = false;
+    dom.loginSubmitBtn.textContent = "Sign In";
+  }
+}
+
+async function checkAuthRequired() {
+  try {
+    const data = await apiFetch("/health/detailed", { method: "GET" });
+    state.authRequired = data.auth_enabled || false;
+    if (state.authRequired && !getAuthKey()) {
+      showLoginModal();
+      return false;
+    }
+    state.authKey = getAuthKey() || "";
+    return true;
+  } catch (e) {
+    console.warn("[auth] Failed to check auth status:", e);
+    // Assume no auth required if we can't check
+    return true;
+  }
+}
+
 // ── Event listeners ───────────────────────────────────
 dom.sidebarToggle.addEventListener("click", () => {
   dom.sidebar.classList.toggle("collapsed");
@@ -550,8 +671,18 @@ dom.resetModal.addEventListener("click", (e) => {
   if (e.target === dom.resetModal) dom.resetModal.style.display = "none";
 });
 
+// Auth event listeners
+dom.loginForm.addEventListener("submit", handleLogin);
+
 // ── Init ───────────────────────────────────────────────
-refreshKBStatus();
-loadPersistedSessions();
-connectWS();
+async function init() {
+  const authOk = await checkAuthRequired();
+  if (authOk) {
+    refreshKBStatus();
+    loadPersistedSessions();
+    connectWS();
+  }
+}
+
+init();
 })();

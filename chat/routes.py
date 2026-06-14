@@ -19,7 +19,7 @@ from agent.rag_agent import LLMError, RAGAgent, SessionNotFoundError
 from kb.ingest import ingest_documents, ingest_file, ingest_text
 
 if TYPE_CHECKING:
-    from kb.vector_store import VectorStore
+    from kb.vector_store_base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ router = APIRouter()
 
 # ── Shared state (initialized at startup) ──────────────────────────
 _agent: RAGAgent | None = None
-_store: VectorStore | None = None
+_store: "VectorStoreBase" | None = None
 
 
 def set_agent(agent: RAGAgent) -> None:
@@ -35,7 +35,7 @@ def set_agent(agent: RAGAgent) -> None:
     _agent = agent
 
 
-def set_store(store: VectorStore) -> None:
+def set_store(store: "VectorStoreBase") -> None:
     global _store
     _store = store
 
@@ -46,7 +46,7 @@ def _get_agent() -> RAGAgent:
     return _agent
 
 
-def _get_store() -> VectorStore:
+def _get_store() -> "VectorStoreBase":
     if _store is None:
         raise HTTPException(status_code=503, detail="Knowledge base not initialized")
     return _store

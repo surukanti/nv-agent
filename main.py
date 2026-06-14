@@ -10,7 +10,7 @@ from chat.app import create_app
 from chat.routes import set_agent, set_store
 from config import config
 from kb.ingest import ingest_documents
-from kb.vector_store import VectorStore
+from kb.vector_store_factory import create_vector_store, get_vector_store_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,11 +30,21 @@ def main() -> None:
     # Initialize knowledge base
     print("[init] Loading knowledge base...")
     try:
-        store = VectorStore(
+        vs_config = get_vector_store_config()
+        # Remove 'backend' from config since we pass it explicitly
+        backend = vs_config.pop("backend", config.kb.vector_store)
+        vs_config.update(config.kb.vector_store_options)
+        store = create_vector_store(
+            backend=backend,
             index_dir=config.kb.index_dir,
             embedding_dim=config.nvidia.embedding_dim,
+            **vs_config,
         )
         set_store(store)
+        print(f"[init] Using vector store backend: {backend}")
+    except ImportError as exc:
+        logger.error("[init] missing dependency for vector store: %s", exc)
+        sys.exit(1)
     except Exception as exc:
         logger.error("[init] failed to initialize knowledge base: %s", exc)
         sys.exit(1)

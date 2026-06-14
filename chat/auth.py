@@ -32,8 +32,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         if not path.startswith("/api"):
             return await call_next(request)
 
-        # Skip health endpoint — it should always be accessible
-        if path == "/api/health":
+        # Skip health endpoints — should always be accessible
+        if path in ("/api/health", "/api/health/detailed"):
             return await call_next(request)
 
         # If no auth key configured, allow all access
