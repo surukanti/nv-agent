@@ -100,19 +100,19 @@ NVIDIA NIM (NVIDIA Inference Microservices) provides hosted, state-of-the-art op
 │  │          │    │              │    │           │    │          │ │
 │  │  Chat    │◀──▶│  Chat API    │◀──▶│ RAG Agent │◀──▶│Knowledge │ │
 │  │  UI      │    │  (FastAPI)   │    │ (LLM+RAG) │    │  Base    │ │
-│  │          │    │              │    │           │    │(FAISS +  │ │
-│  │ Browser  │    │ REST / SSE / │    │ Retrieve →│    │ Embeds)  │ │
+│  │          │    │              │    │           │    │(Vector   │ │
+│  │ Browser  │    │ REST / SSE / │    │ Retrieve →│    │ Store)   │ │
 │  │ WebSocket│    │ WebSocket    │    │ Augment → │    │          │ │
 │  │          │    │              │    │ Generate  │    │          │ │
 │  └──────────┘    └──────────────┘    └───────────┘    └──────────┘ │
 │       ▲               ▲                   ▲               ▲       │
 │       │               │                   │               │       │
 │       │          ┌────┴─────┐        ┌────┴─────┐   ┌────┴────┐  │
-│       │          │  Session │        │  NVIDIA   │   │  FAISS  │  │
-│       │          │  Store   │        │  NIM API  │   │  Index  │  │
-│       │          │  (Disk)  │        │ (Cloud)   │   │  (Disk) │  │
-│       │          └──────────┘        └───────────┘   └─────────┘  │
-│       │                                                              │
+│       │          │  Session │        │  NVIDIA   │   │ Vector  │  │
+│       │          │  Store   │        │  NIM API  │   │ Store   │  │
+│       │          │  (Disk)  │        │ (Cloud)   │   │(FAISS/  │  │
+│       │          └──────────┘        └───────────┘   │Qdrant/  │  │
+│       │                                               │ChromaDB)│  │
 │  ┌────┴──────────────────────────────────────────────────────────┐  │
 │  │                     config.py (.env)                          │  │
 │  └──────────────────────────────────────────────────────────────┘  │
@@ -126,7 +126,7 @@ NVIDIA NIM (NVIDIA Inference Microservices) provides hosted, state-of-the-art op
 | **Presentation** | `chat/ui/` | Browser UI — vanilla HTML/CSS/JS, WebSocket + SSE + REST |
 | **API** | `chat/` | FastAPI routes, CORS, request/response models, streaming |
 | **Agent** | `agent/` | RAG logic (retrieve → augment → generate), session management |
-| **Knowledge Base** | `kb/` | Document ingestion, chunking, embedding, FAISS vector store |
+| **Knowledge Base** | `kb/` | Document ingestion, chunking, embedding, pluggable vector store (FAISS/Qdrant/ChromaDB) |
 
 ---
 
@@ -147,9 +147,9 @@ This is the core of the AI agent — how a user question becomes a grounded, cit
                ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  2. RETRIEVE                                                 │
-│     Query vector ──▶ FAISS inner-product search ──▶ top-5   │
-│     most relevant chunks from the knowledge base             │
-│     (Local FAISS index on disk)                              │
+│     Query vector ──▶ Vector store search (FAISS/Qdrant/     │
+│     ChromaDB) ──▶ top-5 most relevant chunks from KB         │
+│     (Choice of backend via NV_AGENT_VECTOR_STORE)            │
 └──────────────┬───────────────────────────────────────────────┘
                │
                ▼
@@ -195,17 +195,18 @@ Every answer cites its source file and chunk number. If the knowledge base doesn
                  ┌─────────────┼─────────────┐
                  │             │             │
           ┌──────▼──────┐ ┌───▼────┐ ┌──────▼──────┐
-          │   Chunker   │ │ Embed  │ │  FAISS      │
-          │  (Boundary  │ │ Client │ │  Vector     │
-          │   Aware)    │ │(Batch) │ │  Store      │
-          └──────┬──────┘ └───┬────┘ └──────┬──────┘
-                 │            │             │
+          │   Chunker   │ │ Embed  │ │  Vector     │
+          │  (Boundary  │ │ Client │ │  Store      │
+          │   Aware)    │ │(Batch) │ │(FAISS/Qdrant/│
+          └──────┬──────┘ └───┬────┘ │  ChromaDB)  │
+                 │            │      └──────┬──────┘
                  └────────────┼─────────────┘
                               │
                       ┌───────▼───────┐
                       │  Knowledge    │
                       │  Base Index   │
-                      │  (kb/index/)  │
+                      │ (kb/index/ or │
+                      │  Docker vol)  │
                       └───────┬───────┘
                               │
               ┌───────────────┼───────────────┐
@@ -328,7 +329,11 @@ nv-agent/
 │   ├── chunker.py           #    Multi-level text splitting (paragraph→sentence→word)
 │   ├── embed.py             #    NVIDIA embedding client (singleton, batched, error-handled)
 │   ├── ingest.py            #    File ingestion + readers (PDF, DOCX, 10 text formats)
-│   ├── vector_store.py      #    FAISS index + chunk metadata + persistence
+│   ├── vector_store.py              #    Abstract base class (VectorStoreBase)
+│   ├── vector_store_faiss.py        #    FAISS vector store implementation
+│   ├── vector_store_qdrant.py       #    Qdrant vector store implementation
+│   ├── vector_store_chromadb.py     #    ChromaDB vector store implementation
+│   ├── vector_store_factory.py      #    Factory for creating vector stores
 │   └── index/               #    Saved FAISS index + chunks.json (auto-created)
 │
 ├── agent/                   # 🤖 Agent Layer
@@ -371,7 +376,7 @@ nv-agent/
 | Decision | Why |
 |----------|-----|
 | **No build step** | UI is vanilla HTML/CSS/JS — zero toolchain, just open in a browser |
-| **FAISS (not a vector DB)** | Zero-infrastructure — index lives on disk, no external service needed |
+| **Pluggable vector stores** | Factory pattern with FAISS (default, zero-infra), Qdrant (high-perf Rust), ChromaDB (Python) |
 | **Singleton OpenAI client** | Both `embed.py` and `rag_agent.py` lazily create one client — no connection churn |
 | **Thread+Queue for streaming** | OpenAI SDK is synchronous — worker thread + `asyncio.Queue` bridges sync→async |
 | **Atomic file writes** | Sessions and index use temp-file + `rename()` (POSIX atomic) — no corruption on crash |

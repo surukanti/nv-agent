@@ -11,7 +11,7 @@ NV-Agent is a **self-hosted RAG AI Agent** — a complete application that lets 
 ### Commands
 
 ```bash
-# Run the server
+# Run the server (local)
 python main.py                    # → http://localhost:8000
 
 # Quick API smoke test (no server needed)
@@ -28,6 +28,13 @@ ruff check .
 
 # Type check
 mypy . --ignore-missing-imports
+
+# Docker Compose
+make compose-up                   # FAISS (default, zero infra)
+make compose-qdrant               # Qdrant vector DB
+make compose-chromadb             # ChromaDB vector DB
+make stack-down                   # Stop all services
+make stack-logs                   # Follow logs
 ```
 
 ### Key URLs (when running)
@@ -42,6 +49,9 @@ mypy . --ignore-missing-imports
 |----------|----------|-------------|
 | `NVIDIA_NIM_API_KEY` | ✅ | Primary API key (also accepts `NVIDIA_API_KEY`, `NGC_API_KEY`) |
 | `MODEL` | ❌ | Override chat model |
+| `NV_AGENT_VECTOR_STORE` | ❌ | Vector store backend: `faiss` (default), `chromadb`, `qdrant` |
+| `NV_AGENT_AUTH_KEY` | ❌ | API key for auth middleware (protects `/api/*`) |
+| `NV_AGENT_RATE_LIMIT` | ❌ | Rate limit per IP (format: `N/unit`, e.g., `60/minute`) |
 
 ## Architecture — 4 Layers
 
@@ -49,10 +59,15 @@ mypy . --ignore-missing-imports
 chat/ui/     → Browser UI (vanilla HTML/CSS/JS)
 chat/        → FastAPI routes (REST, SSE, WebSocket)
 agent/       → RAG logic (retrieve → augment → generate)
-kb/          → Knowledge base (ingest, chunk, embed, FAISS)
+kb/          → Knowledge base (ingest, chunk, embed, VectorStore)
 ```
 
-**Data flow**: User query → embed → FAISS search → augment prompt → LLM generate → stream tokens back
+**Data flow**: User query → embed → VectorStore search (FAISS/Qdrant/ChromaDB) → augment prompt → LLM generate → stream tokens back
+
+**Vector Store Backends** (pluggable via factory pattern):
+- **FAISS** (default) — Zero-infrastructure, local disk index
+- **Qdrant** — High-performance Rust vector DB (Docker profile: `--profile qdrant`)
+- **ChromaDB** — Python-based embedding DB (Docker profile: `--profile chromadb`)
 
 ## Key Patterns
 
@@ -105,6 +120,12 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 2. Delete `kb/index/` (different embedding = different dimensions)
 3. Set appropriate API key env var
 
+### New Vector Store Backend
+1. Create new implementation in `kb/vector_store_<name>.py` inheriting `VectorStoreBase`
+2. Register in `kb/vector_store_factory.py::create_vector_store()`
+3. Add environment variable config in `config.py::KBConfig.__post_init__()`
+4. Update `docker-compose.yml` if external service needed
+
 ### New API Endpoint
 1. Add route handler in `chat/routes.py` (follow existing pattern)
 2. Add Pydantic request/response models
@@ -130,7 +151,11 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 | `kb/chunker.py` | Text splitting (paragraph→sentence→word) |
 | `kb/embed.py` | NVIDIA embedding client (singleton) |
 | `kb/ingest.py` | Document ingestion + 12 format readers |
-| `kb/vector_store.py` | FAISS index + persistence |
+| `kb/vector_store.py` | Abstract base class (VectorStoreBase) |
+| `kb/vector_store_faiss.py` | FAISS vector store implementation |
+| `kb/vector_store_qdrant.py` | Qdrant vector store implementation |
+| `kb/vector_store_chromadb.py` | ChromaDB vector store implementation |
+| `kb/vector_store_factory.py` | Factory for creating vector stores |
 | `agent/rag_agent.py` | RAG logic + session management |
 | `agent/session_store.py` | Thread-safe disk persistence |
 | `chat/app.py` | FastAPI factory |
