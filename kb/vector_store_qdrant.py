@@ -112,15 +112,18 @@ class QdrantVectorStore(VectorStoreBase):
         if not query_vec:
             return []
 
-        results: list["ScoredPoint"] = self._client.search(
+         from qdrant_client.http.models import SearchParams
+
+        results = self._client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vec,
+            query=query_vec,
             limit=min(top_k, self.count),
             with_payload=True,
+            search_params=SearchParams(hnsw_ef=128, exact=False),
         )
 
         search_results: list[SearchResult] = []
-        for scored_point in results:
+        for scored_point in results.points:
             payload = scored_point.payload or {}
             chunk = Chunk(
                 text=payload.get("text", ""),

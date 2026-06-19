@@ -283,7 +283,7 @@ Conversations survive server restarts. Every message is timestamped and saved to
 
 | Capability | How It Works |
 |-----------|-------------|
-| **Grounded answers** | Every response is backed by FAISS vector search over your documents, with source citations |
+| **Grounded answers** | Every response is backed by vector search over your documents, with source citations |
 | **Real-time streaming** | WebSocket + SSE streaming — see the answer (and the agent's reasoning) token by token |
 | **Thinking/reasoning display** | Agent's reasoning tokens shown in a collapsible block — see *how* it thinks |
 | **Multi-format ingestion** | Drop in `.pdf`, `.docx`, `.txt`, `.md`, `.py`, `.json`, `.yaml`, `.yml`, `.csv`, `.html`, `.xml`, `.rst` — auto-indexed on startup |
@@ -295,7 +295,7 @@ Conversations survive server restarts. Every message is timestamped and saved to
 | **Production patterns** | Custom exceptions, proper HTTP status codes, thread-safe state, filename sanitization, upload size limits |
 | **API key auth** | Optional authentication middleware — protect your instance with `NV_AGENT_AUTH_KEY` |
 | **Rate limiting** | Per-IP sliding window rate limiter — configurable via `NV_AGENT_RATE_LIMIT` |
-| **Zero infrastructure** | No external DB — FAISS index on disk, session JSONs on disk, one Python process |
+| **Pluggable vector stores** | Choose **FAISS** (default, zero-infra), **ChromaDB**, or **Qdrant** (high-performance Rust DB) |
 
 ---
 
@@ -505,6 +505,24 @@ All settings are in `config.py` with sensible defaults. Override via environment
 | `MODEL` | ❌ | `nvidia/nemotron-3-ultra-550b-a55b` | Override the chat model |
 | `NV_AGENT_AUTH_KEY` | ❌ | — | API key for auth middleware (when set, all `/api/*` require `X-API-Key`) |
 | `NV_AGENT_RATE_LIMIT` | ❌ | `60/minute` | Rate limit per IP (format: `N/unit`, e.g., `10/second`, `100/hour`) |
+| `NV_AGENT_VECTOR_STORE` | ❌ | `faiss` | Vector store backend: `faiss`, `chromadb`, or `qdrant` |
+
+### Vector Store Configuration
+
+| Backend | Required Env Vars | Optional Env Vars | Notes |
+|---------|-------------------|-------------------|-------|
+| **FAISS** (default) | — | — | Zero-infrastructure, index on disk, no external service |
+| **ChromaDB** | `NV_AGENT_VECTOR_STORE=chromadb` | `NV_AGENT_CHROMADB_COLLECTION`, `NV_AGENT_CHROMADB_PERSIST_DIR` | Open-source embedding DB, local file-based |
+| **Qdrant** | `NV_AGENT_VECTOR_STORE=qdrant` | `NV_AGENT_QDRANT_PATH` (local mode), or `NV_AGENT_QDRANT_HOST`, `NV_AGENT_QDRANT_PORT`, `NV_AGENT_QDRANT_API_KEY` (server mode) | High-performance Rust vector DB |
+
+**Install optional dependencies:**
+```bash
+# ChromaDB
+pip install chromadb
+
+# Qdrant
+pip install qdrant-client
+```
 
 ### Config Defaults (`config.py`)
 
@@ -594,6 +612,7 @@ data: [DONE]
 
 Run NV-Agent in a container — no Python installation needed on the host.
 
+### Option 1: FAISS (Default) — Zero External Dependencies
 ```bash
 # Build and run with docker compose
 cp .env.example .env  # Set your NVIDIA API key
@@ -606,7 +625,27 @@ docker run -p 8000:8000 --env-file .env -v $(pwd)/data:/app/data nv-agent
 
 **Docker Compose** persists your documents and FAISS index in named volumes, so they survive container restarts.
 
-**Custom configuration**:
+### Option 2: With Qdrant Vector Database (Recommended for Production)
+```bash
+# Uses docker-compose.yml with Qdrant service
+cp .env.example .env
+# Add to .env:
+# NV_AGENT_VECTOR_STORE=qdrant
+# NV_AGENT_QDRANT_HOST=qdrant
+# NV_AGENT_QDRANT_PORT=6333
+docker compose --profile qdrant up -d
+```
+
+This starts both NV-Agent and Qdrant containers, with Qdrant persisting data in a named volume.
+
+### Option 3: With ChromaDB
+```bash
+# Add to .env:
+# NV_AGENT_VECTOR_STORE=chromadb
+docker compose --profile chromadb up -d
+```
+
+### Custom Configuration
 ```bash
 # With auth key and custom rate limit
 docker run -p 8000:8000 \
@@ -615,6 +654,14 @@ docker run -p 8000:8000 \
   -e NV_AGENT_RATE_LIMIT="30/minute" \
   nv-agent
 ```
+
+### Vector Store Comparison for Docker
+
+| Backend | Pros | Cons | Best For |
+|---------|------|------|----------|
+| **FAISS** | Zero config, fast, no extra container | Single-process only, no scaling | Dev, single-user, small KB |
+| **ChromaDB** | Easy local setup, good features | Python-based, slower at scale | Medium KB, local dev with persistence |
+| **Qdrant** | Rust performance, filtering, distributed, server mode | Extra container, more resources | Production, large KB, multi-user, filtering |
 
 ---
 

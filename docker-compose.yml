@@ -1,11 +1,18 @@
 # ── NV-Agent Docker Compose ─────────────────────────────────
 # Usage:
-#   docker compose up -d          # Start the agent
-#   docker compose logs -f        # Follow logs
-#   docker compose down           # Stop
+#   docker compose up -d                    # Start with FAISS (default)
+#   docker compose --profile qdrant up -d   # Start with Qdrant vector DB
+#   docker compose --profile chromadb up -d # Start with ChromaDB
+#   docker compose logs -f                  # Follow logs
+#   docker compose down                     # Stop
 #
 # To add documents, place them in the ./data directory on the host
 # before starting, or upload via the browser UI after startup.
+#
+# Profiles:
+# - (default): FAISS vector store (no external DB)
+# - qdrant:    Qdrant vector database (high-performance Rust)
+# - chromadb:  ChromaDB vector database (Python-based)
 
 services:
   nv-agent:
@@ -20,10 +27,20 @@ services:
     environment:
       - NV_HOST=0.0.0.0
       - NV_PORT=8000
+      # Vector store configuration (can be overridden in .env)
+      - NV_AGENT_VECTOR_STORE=${NV_AGENT_VECTOR_STORE:-faiss}
+      # Qdrant (used when profile=qdrant)
+      - NV_AGENT_QDRANT_HOST=${NV_AGENT_QDRANT_HOST:-qdrant}
+      - NV_AGENT_QDRANT_PORT=${NV_AGENT_QDRANT_PORT:-6333}
+      # ChromaDB (used when profile=chromadb)
+      - NV_AGENT_CHROMADB_PERSIST_DIR=${NV_AGENT_CHROMADB_PERSIST_DIR:-/app/kb/index/chromadb}
     volumes:
       # Persist documents and sessions across container restarts
-      - nv-agent-data:/app/data
+      # Mount host data directory for auto-ingestion on startup
+      - ./data:/app/data
       - nv-agent-index:/app/kb/index
+      # Named volume for session persistence (separate from host data)
+      - nv-agent-sessions:/app/data/sessions
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -31,9 +48,70 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    # Profiles: FAISS (default), qdrant, chromadb
+    profiles:
+      - qdrant
+      - chromadb
+    # Note: depends_on with profiles requires Docker Compose v2.20+
+    # Commented out to avoid "depends on undefined service" when profile not active
+    # depends_on:
+    #   qdrant:
+    #     condition: service_healthy
+    #   chromadb:
+    #     condition: service_healthy
+
+  # ── Qdrant Vector Database (profile: qdrant) ─────────────────────
+  # High-performance vector database written in Rust
+  # Docs: https://qdrant.tech/documentation/
+  qdrant:
+    image: qdrant/qdrant:v1.18.0
+    container_name: nv-agent-qdrant
+    profiles: ["qdrant"]
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── ChromaDB Vector Database (profile: chromadb) ────────────────-
+  # Open-source embedding database
+  # Docs: https://docs.trychroma.com/
+  chromadb:
+    image: chromadb/chroma:1.0.6
+    container_name: nv-agent-chromadb
+    profiles: ["chromadb"]
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb-data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - ANONYMIZED_TELEMETRY=False
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
-  nv-agent-data:
-    driver: local
   nv-agent-index:
+    driver: local
+  nv-agent-sessions:
+    driver: local
+  qdrant-data:
+    driver: local
+  chromadb-data:
     driver: local

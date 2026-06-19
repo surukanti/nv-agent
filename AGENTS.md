@@ -74,14 +74,14 @@ The agent follows the **Retrieve → Augment → Generate** pattern: for every u
 
 | Capability | Implementation |
 |-----------|---------------|
-| Knowledge-grounded Q&A | RAG pipeline: embed query → FAISS retrieval → context injection → LLM generation |
+| Knowledge-grounded Q&A | RAG pipeline: embed query → vector retrieval → context injection → LLM generation |
 | 12 file formats | Text (`.txt`, `.md`, `.py`, `.json`, `.yaml`, `.yml`, `.csv`, `.html`, `.xml`, `.rst`) + binary (`.pdf`, `.docx`) |
 | Smart chunking | Paragraph → sentence → word boundary splitting with overlap, no mid-sentence cuts |
 | Real-time streaming | WebSocket + SSE with reasoning/thinking token support |
 | Session persistence | Disk-backed JSON with atomic writes, survives server restarts |
 | Browser file upload | Multipart upload with filename sanitization, extension validation, 50MB size cap |
 | Production error handling | Custom exception hierarchy, per-route catch blocks, proper HTTP codes, no internal leaks |
-| Zero-infrastructure | No external DB — FAISS index on disk, session JSONs on disk, one Python process |
+| Pluggable vector stores | Choose **FAISS** (default), **ChromaDB**, or **Qdrant** — factory pattern |
 | Multi-model support | Any model on NVIDIA NIM (Nemotron, Llama, DeepSeek, etc.) — change one config value |
 
 ---
@@ -118,7 +118,7 @@ The agent follows the **Retrieve → Augment → Generate** pattern: for every u
 
 External Dependencies:
   • NVIDIA NIM API (cloud)  — LLM inference + embeddings
-  • FAISS (local)           — Vector similarity search
+  • Vector Store (local/remote) — FAISS / ChromaDB / Qdrant
   • PyPDF2 (local)          — PDF text extraction
   • python-docx (local)     — DOCX text extraction
 ```
@@ -130,7 +130,7 @@ External Dependencies:
 | **Presentation** | `chat/ui/` | `index.html`, `style.css`, `app.js` | Browser UI — vanilla HTML/CSS/JS |
 | **API** | `chat/` | `app.py`, `routes.py` | FastAPI routes, CORS, request validation, streaming bridge |
 | **Agent** | `agent/` | `rag_agent.py`, `session_store.py` | RAG logic, session management, LLM calls |
-| **Knowledge Base** | `kb/` | `chunker.py`, `embed.py`, `ingest.py`, `vector_store.py` | Document ingestion, chunking, embedding, FAISS storage |
+| **Knowledge Base** | `kb/` | `chunker.py`, `embed.py`, `ingest.py`, `vector_store.py`, `vector_store_faiss.py`, `vector_store_qdrant.py`, `vector_store_chromadb.py`, `vector_store_factory.py` | Document ingestion, chunking, embedding, pluggable vector storage |
 
 ---
 
@@ -151,9 +151,9 @@ The core of the AI agent — how a user question becomes a grounded, cited answe
                ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  2. RETRIEVE                                                 │
-│     Query vector ──▶ FAISS inner-product search ──▶ top-k   │
-│     most relevant chunks from the knowledge base             │
-│     (kb/vector_store.py — local FAISS index on disk)         │
+│     Query vector ──▶ Vector store search (FAISS/Qdrant/     │
+│     ChromaDB) ──▶ top-k most relevant chunks from KB         │
+│     (kb/vector_store_factory.py → backend-specific impl)     │
 └──────────────┬───────────────────────────────────────────────┘
                │
                ▼
@@ -191,7 +191,8 @@ The core of the AI agent — how a user question becomes a grounded, cited answe
 │                        main.py (entry point)                    │
 │                                                                 │
 │  1. config.py ──▶ Validates API key, sets all defaults          │
-│  2. kb/vector_store.py ──▶ Loads/creates FAISS index            │
+│  2. kb/vector_store_factory.py ──▶ Creates vector store (FAISS/ │
+│     Qdrant/ChromaDB) from config                                │
 │  3. kb/ingest.py ──▶ Walks data/, reads files, chunks, indexes  │
 │     ├── kb/chunker.py ──▶ Paragraph/sentence/word-aware splits  │
 │     └── kb/embed.py ──▶ Batches embeddings via NVIDIA API       │
@@ -369,7 +370,11 @@ nv-agent/
 │   ├── chunker.py           # Multi-level text chunking (paragraph→sentence→word)
 │   ├── embed.py             # NVIDIA embedding client (singleton, batched, error-handled)
 │   ├── ingest.py            # Document ingestion + 12 format readers + DocumentIngestionError
-│   ├── vector_store.py      # FAISS index + chunk metadata + persistence
+│   ├── vector_store.py              # Abstract base class (VectorStoreBase)
+│   ├── vector_store_faiss.py        # FAISS implementation
+│   ├── vector_store_qdrant.py       # Qdrant implementation
+│   ├── vector_store_chromadb.py     # ChromaDB implementation
+│   ├── vector_store_factory.py      # Factory for creating vector stores
 │   └── index/               # Saved FAISS index + chunks.json (auto-created)
 │
 ├── agent/                   # Agent Layer
@@ -395,12 +400,32 @@ nv-agent/
 
 ## How to Run
 
-### One-time Setup
+### One-time Setup (Local)
 
 1. `cp .env.example .env` → set `NVIDIA_NIM_API_KEY` (also accepts `NVIDIA_API_KEY`, `NGC_API_KEY`)
 2. `pip install -r requirements.txt`
 3. Add documents to `data/` (optional — supports `.txt .md .py .json .yaml .yml .csv .html .xml .rst .pdf .docx`)
 4. `python main.py` → http://localhost:8000
+
+### Docker (Recommended)
+
+```bash
+# FAISS (default, zero external dependencies)
+docker compose up -d
+
+# Qdrant (high-performance Rust vector DB)
+docker compose --profile qdrant up -d
+
+# ChromaDB (Python-based vector DB)
+docker compose --profile chromadb up -d
+```
+
+Set vector store via `NV_ backend in `.env`:
+```bash
+NV_AGENT_VECTOR_STORE=faiss      # Default
+NV_AGENT_VECTOR_STORE=qdrant     # Requires qdrant profile
+NV_AGENT_VECTOR_STORE=chromadb   # Requires chromadb profile
+```
 
 ### Quick API Smoke Test
 
@@ -491,12 +516,13 @@ All settings in `config.py` (dataclasses). Key env vars:
 
 ### Knowledge Base
 
-- FAISS index persists in `kb/index/` — survives restarts
+- Vector store persists in `kb/index/` (FAISS) or named Docker volumes (Qdrant/ChromaDB) — survives restarts
 - **When changing the embedding model**: DELETE `kb/index/` or vectors will mismatch
 - `data/sessions/` is excluded from ingestion (along with `.git`, `.venv`, `__pycache__`, `.claude`)
 - PDF support: `PyPDF2>=3.0.0` (lazy import — `ImportError` if missing)
 - DOCX support: `python-docx>=1.1.0` (lazy import — `ImportError` if missing)
 - Missing optional dependencies produce clear error messages, not crashes
+- **Vector store backend**: Set via `NV_AGENT_VECTOR_STORE` (faiss/chromadb/qdrant) — uses factory pattern in `kb/vector_store_factory.py`
 
 ### Embedding Client (`kb/embed.py`)
 
@@ -567,6 +593,8 @@ NV-Agent uses the OpenAI-compatible API format via `config.nvidia.base_url`. To 
 1. Update `config.py` — change `base_url`, `chat_model`, `embedding_model`, `embedding_dim`
 2. Delete `kb/index/` to reset the vector store (different embedding = different dimensions)
 3. Set the appropriate API key env var
+
+**Note**: If changing the embedding model, you also need to reset the vector store for Qdrant/ChromaDB backends. Use `DELETE /api/kb/reset` or the respective backend's CLI.
 
 ---
 
@@ -639,10 +667,11 @@ Currently, NV-Agent uses **manual validation** — there is no automated test su
 
 | Pitfall | What Happens | How to Avoid |
 |---------|-------------|-------------|
-| Changing embedding model without resetting index | Vector dimension mismatch → search failures | Always delete `kb/index/` when changing `embedding_model` or `embedding_dim` |
+| Changing embedding model without resetting index | Vector dimension mismatch → search failures | Always delete `kb/index/` when changing `embedding_model` or `embedding_dim`; use `DELETE /api/kb/reset` for Qdrant/ChromaDB |
 | Creating new OpenAI client per call | Connection churn, slow performance | Use singleton `_get_client()` pattern |
 | Running `chat_stream()` directly in async context | `StopIteration` bug in async generators | Always use `_consume_stream()` in worker thread + `asyncio.Queue` |
 | Committing `.env` | API key leaked to source control | `.env` is in `.gitignore` — NEVER override this |
-| Forgetting `_persist_session()` | Session saved in memory but not on disk → lost on restart | Call `_persist_session()` after every state-changing operation |
+| Forgetting `_persist()` | Session saved in memory but not on disk → lost on restart | Call `_persist()` after every state-changing operation |
 | Setting `Content-Type` for FormData uploads | Browser can't set multipart boundary → server rejects | `apiFetch()` skips Content-Type for FormData — don't add it |
 | Using `embed_query()` failure as fatal | Single query failure crashes the whole chat | `embed_query()` returns `[]` on failure → search returns empty results gracefully |
+| Switching vector store backends without re-ingesting | Empty KB or dimension mismatch | Re-ingest documents after changing `NV_AGENT_VECTOR_STORE` |
