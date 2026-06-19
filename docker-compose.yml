@@ -48,17 +48,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    # Profiles: FAISS (default), qdrant, chromadb
-    profiles:
-      - qdrant
-      - chromadb
-    # Note: depends_on with profiles requires Docker Compose v2.20+
-    # Commented out to avoid "depends on undefined service" when profile not active
-    # depends_on:
-    #   qdrant:
-    #     condition: service_healthy
-    #   chromadb:
-    #     condition: service_healthy
+    # Note: nv-agent runs by default (FAISS mode) and also with --profile qdrant/chromadb
+    # when those external vector stores are needed
 
   # ── Qdrant Vector Database (profile: qdrant) ─────────────────────
   # High-performance vector database written in Rust
