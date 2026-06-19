@@ -20,7 +20,9 @@ RESET := \033[0m
 # ── Phony targets ────────────────────────────────────────────
 .PHONY: help install install-dev lint format test test-cov \
         typecheck run run-dev docker-build docker-run docker-stop \
-        deploy stack-up stack-down clean
+        deploy stack-up stack-down stack-logs \
+        compose-up compose-qdrant compose-chromadb compose-reset \
+        clean
 
 # ── Default ──────────────────────────────────────────────────
 help: ## Show this help
@@ -108,7 +110,7 @@ docker-test: docker-stop docker-build ## Build & run container, test health, the
 	-$(DOCKER) rm $(IMAGE_NAME)-test >/dev/null 2>&1
 
 # ── Docker Compose ───────────────────────────────────────────
-stack-up: ## Start all services with docker compose
+stack-up: ## Start all services (auto-profile detect)
 	$(DOCKER) compose up -d
 
 stack-down: ## Stop all services
@@ -116,6 +118,31 @@ stack-down: ## Stop all services
 
 stack-logs: ## Follow compose logs
 	$(DOCKER) compose logs -f
+
+stack-ps: ## List compose services
+	$(DOCKER) compose ps
+
+# Profile-specific targets
+compose-up: ## Start with FAISS (default, zero external deps)
+	$(DOCKER) compose up -d
+
+compose-qdrant: ## Start with Qdrant vector DB (high-performance Rust)
+	$(DOCKER) compose --profile qdrant up -d
+
+compose-chromadb: ## Start with ChromaDB vector DB (Python-based)
+	$(DOCKER) compose --profile chromadb up -d
+
+compose-reset: ## Stop, remove volumes, and restart clean (FAISS)
+	$(DOCKER) compose down -v
+	$(DOCKER) compose up -d
+
+compose-reset-qdrant: ## Stop, remove volumes, and restart clean (Qdrant profile)
+	$(DOCKER) compose --profile qdrant down -v
+	$(DOCKER) compose --profile qdrant up -d
+
+compose-reset-chromadb: ## Stop, remove volumes, and restart clean (ChromaDB profile)
+	$(DOCKER) compose --profile chromadb down -v
+	$(DOCKER) compose --profile chromadb up -d
 
 # ── Cleanup ──────────────────────────────────────────────────
 clean: ## Remove caches, temp files, and build artifacts
