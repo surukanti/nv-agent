@@ -29,8 +29,22 @@ WORKDIR /app
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
-# Copy application code
-COPY --chown=appuser:appuser . .
+# Copy Python application code first — these change less often,
+# so this layer stays cached across UI-only edits.
+COPY --chown=appuser:appuser main.py config.py .
+COPY --chown=appuser:appuser chat/__init__.py chat/
+COPY --chown=appuser:appuser chat/app.py chat/
+COPY --chown=appuser:appuser chat/auth.py chat/
+COPY --chown=appuser:appuser chat/rate_limit.py chat/
+COPY --chown=appuser:appuser chat/routes.py chat/
+COPY --chown=appuser:appuser agent/ agent/
+COPY --chown=appuser:appuser kb/ kb/
+
+# ── UI assets (separate layer) ──────────────────────────────
+# UI files change frequently. Keeping them in their own layer
+# ensures Docker's build cache is properly invalidated when
+# only UI changes are made, without re-copying Python code.
+COPY --chown=appuser:appuser chat/ui/ chat/ui/
 
 # Create data directories with correct ownership
 RUN mkdir -p /app/data/sessions /app/kb/index && \

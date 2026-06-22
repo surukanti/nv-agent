@@ -109,15 +109,15 @@ docker-test: docker-stop docker-build ## Build & run container, test health, the
 	-$(DOCKER) rm $(IMAGE_NAME)-test >/dev/null 2>&1
 
 # ── Docker Compose ───────────────────────────────────────────
-compose-up: ## Start all services (nv-agent + qdrant + chromadb)
-	$(DOCKER) compose up -d
+compose-up: ## Start all services (rebuilds image first to pick up code/UI changes)
+	$(DOCKER) compose up -d --build
 
 compose-down: ## Stop all services
 	$(DOCKER) compose down
 
 compose-reset: ## Stop, remove volumes, and restart clean (all services)
 	$(DOCKER) compose down -v
-	$(DOCKER) compose up -d
+	$(DOCKER) compose up -d --build
 
 compose-logs: ## Follow compose logs
 	$(DOCKER) compose logs -f
