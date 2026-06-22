@@ -70,6 +70,7 @@ const dom = {
   typingIndicator: $("#typing-indicator"),
   toastContainer: $("#toast-container"),
   dropzoneOverlay: $("#dropzone-overlay"),
+  sidebarOpenBtn: $("#sidebar-open-btn"),
   kbIngestProgress: $("#kb-ingest-progress"),
   kbProgressBar: $("#kb-progress-bar"),
   // Auth
@@ -989,6 +990,7 @@ function initKeyboardShortcuts() {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "S" || e.key === "s")) {
       e.preventDefault();
       dom.sidebar.classList.toggle("collapsed");
+      document.body.classList.toggle("sidebar-collapsed", dom.sidebar.classList.contains("collapsed"));
     }
 
     // Ctrl/Cmd + K: focus session search
@@ -1032,6 +1034,7 @@ function initSidebarBackdrop() {
   if (dom.sidebarBackdrop) {
     dom.sidebarBackdrop.addEventListener("click", () => {
       dom.sidebar.classList.add("collapsed");
+      document.body.classList.add("sidebar-collapsed");
     });
   }
 }
@@ -1039,7 +1042,16 @@ function initSidebarBackdrop() {
 // ── Event listeners ───────────────────────────────────
 dom.sidebarToggle.addEventListener("click", () => {
   dom.sidebar.classList.toggle("collapsed");
+  document.body.classList.toggle("sidebar-collapsed", dom.sidebar.classList.contains("collapsed"));
 });
+
+// Reopen sidebar button (visible when sidebar is collapsed)
+if (dom.sidebarOpenBtn) {
+  dom.sidebarOpenBtn.addEventListener("click", () => {
+    dom.sidebar.classList.remove("collapsed");
+    document.body.classList.remove("sidebar-collapsed");
+  });
+}
 
 dom.newSessionBtn.addEventListener("click", () => {
   if (state.streaming) return;

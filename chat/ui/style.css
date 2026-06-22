@@ -107,6 +107,32 @@ a { color: var(--accent); }
 }
 .sidebar.collapsed { margin-left: calc(-1 * var(--sidebar-w)); }
 
+/* ── Sidebar reopen button ─────────────────────────────── */
+.sidebar-open-btn {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 50;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
+  box-shadow: var(--shadow-md);
+}
+.sidebar-open-btn:hover { color: var(--text); background: var(--bg-elevated); }
+.sidebar-open-btn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+body.sidebar-collapsed .sidebar-open-btn { display: flex; }
+
+/* Push content down when sidebar is collapsed to make room for reopen button */
+body.sidebar-collapsed .empty-state { padding-top: 60px; }
+body.sidebar-collapsed .messages { padding-top: 60px; }
+
 .main {
   flex: 1;
   display: flex;
@@ -145,10 +171,20 @@ a { color: var(--accent); }
 /* ── Sidebar Sections ───────────────────────────────────── */
 .sidebar-section {
   border-bottom: 1px solid var(--border);
-  overflow: hidden;
 }
-.sidebar-section-body { padding: 16px; transition: max-height var(--duration-slow) var(--ease-out); }
-.sidebar-section.collapsed .sidebar-section-body { max-height: 0 !important; padding-top: 0; padding-bottom: 0; overflow: hidden; }
+.sidebar-section-body {
+  padding: 16px;
+  max-height: 800px;
+  overflow: hidden;
+  transition: max-height var(--duration-slow) var(--ease-out),
+              padding var(--duration-slow) var(--ease-out);
+}
+.sidebar-section.collapsed .sidebar-section-body {
+  max-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border: none;
+}
 
 .section-toggle {
   width: 100%;
@@ -966,8 +1002,7 @@ textarea:focus:not(:focus-visible) { outline: none; box-shadow: none; border-col
   background: rgba(0,0,0,.5);
   z-index: calc(var(--z-sidebar) - 1);
 }
-.sidebar:not(.collapsed) ~ .sidebar-backdrop { display: none; }
 
 @media (max-width: 768px) {
-  .sidebar:not(.collapsed) ~ .sidebar-backdrop { display: block; }
+  body:not(.sidebar-collapsed) .sidebar-backdrop { display: block; }
 }
