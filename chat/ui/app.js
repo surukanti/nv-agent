@@ -23,7 +23,6 @@ function clearStoredAuthKey() {
 }
 
 function getAuthKey() {
-  // Check sessionStorage first (non-persistent), then localStorage
   return sessionStorage.getItem(AUTH_KEY_STORAGE) || localStorage.getItem(AUTH_KEY_STORAGE) || "";
 }
 
@@ -35,6 +34,8 @@ const state = {
   sessions: [],
   authRequired: false,
   authKey: "",
+  lastFocusedElement: null,
+  dragCounter: 0,
 };
 
 // ── DOM refs ───────────────────────────────────────────
@@ -43,8 +44,13 @@ const $ = (s) => document.querySelector(s);
 const dom = {
   sidebar: $("#sidebar"),
   sidebarToggle: $("#sidebar-toggle"),
+  sidebarBackdrop: $("#sidebar-backdrop"),
+  sessionsSection: $("#sessions-section"),
+  kbSection: $("#kb-section"),
   newSessionBtn: $("#new-session-btn"),
   sessionList: $("#session-list"),
+  sessionSearch: $("#session-search"),
+  sessionSearchWrap: $("#session-search-wrap"),
   kbChunks: $("#kb-chunks"),
   kbReady: $("#kb-ready"),
   kbRefreshBtn: $("#kb-refresh-btn"),
@@ -63,6 +69,9 @@ const dom = {
   sendBtn: $("#send-btn"),
   typingIndicator: $("#typing-indicator"),
   toastContainer: $("#toast-container"),
+  dropzoneOverlay: $("#dropzone-overlay"),
+  kbIngestProgress: $("#kb-ingest-progress"),
+  kbProgressBar: $("#kb-progress-bar"),
   // Auth
   loginModal: $("#login-modal"),
   loginForm: $("#login-form"),
@@ -71,25 +80,53 @@ const dom = {
   loginSubmitBtn: $("#login-submit-btn"),
 };
 
+// ── Icon SVGs ───────────────────────────────────────────
+const ICONS = {
+  userAvatar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>',
+  botAvatar: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z"/></svg>',
+  copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>',
+  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+  regenerate: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>',
+  trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
+  pencil: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>',
+};
+
+// ── Utility helpers ────────────────────────────────────
+function escHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(
+    () => toast("Copied to clipboard", "success"),
+    () => toast("Failed to copy", "error")
+  );
+}
+
+function debounce(fn, ms) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), ms);
+  };
+}
+
 // ── API helpers ────────────────────────────────────────
 const API = "/api";
 
 async function apiFetch(path, opts = {}) {
-  // Don't set Content-Type for FormData — browser sets it with boundary
   if (!(opts.body instanceof FormData)) {
     opts.headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
   }
-
-  // Add auth key if available
   const authKey = getAuthKey();
   if (authKey) {
     opts.headers = { "X-API-Key": authKey, ...(opts.headers || {}) };
   }
-
   const res = await fetch(API + path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    // If 401, auth key might be invalid/expired
     if (res.status === 401) {
       clearStoredAuthKey();
       state.authKey = "";
@@ -101,22 +138,70 @@ async function apiFetch(path, opts = {}) {
 }
 
 // ── Toast notifications ────────────────────────────────
-function toast(msg, type = "info") {
+function toast(msg, type = "info", duration = 4000) {
   const el = document.createElement("div");
   el.className = "toast " + type;
-  el.textContent = msg;
+  el.setAttribute("role", "alert");
+  el.innerHTML = '<span>' + escHtml(msg) + '</span><div class="toast-progress" style="animation-duration:' + duration + 'ms"></div>';
   dom.toastContainer.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+  setTimeout(() => {
+    el.classList.add("toast-exit");
+    setTimeout(() => el.remove(), 200);
+  }, duration);
 }
 
 // ── Markdown rendering ─────────────────────────────────
 function renderMarkdown(text) {
-  if (window.marked) {
-    marked.setOptions({ breaks: true, gfm: true });
-    return marked.parse(text);
-  }
-  return text.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+  if (!window.marked) return escHtml(text).replace(/\n/g, "<br>");
+
+  const renderer = new marked.Renderer();
+
+  // Code blocks: wrap in container with header
+  renderer.code = function (code, language) {
+    // Handle new marked.js API where code may be an object
+    let src = code;
+    let lang = language || "text";
+    if (typeof code === "object") {
+      src = code.text || "";
+      lang = code.lang || language || "text";
+    }
+    const escaped = escHtml(src);
+    return '<div class="code-block">'
+      + '<div class="code-header">'
+      + '<span class="code-lang">' + escHtml(lang) + '</span>'
+      + '<button class="code-copy-btn" onclick="nvCopyCode(this)" aria-label="Copy code">' + ICONS.copy + ' Copy</button>'
+      + '</div>'
+      + '<pre><code>' + escaped + '</code></pre>'
+      + '</div>';
+  };
+
+  marked.setOptions({ breaks: true, gfm: true, renderer: renderer });
+
+  let html = marked.parse(text);
+
+  // Post-process: convert [Source: ...] into citation badges
+  html = html.replace(
+    /\[Source:\s*([^\]]+)\]/g,
+    function (match, p1) {
+      var safe = escHtml(p1);
+      return '<span class="source-citation" title="' + safe + '">' + safe + '</span>';
+    }
+  );
+
+  return html;
 }
+
+// Global callback for code copy buttons (inside innerHTML)
+window.nvCopyCode = function (btn) {
+  const block = btn.closest(".code-block");
+  if (!block) return;
+  const code = block.querySelector("code");
+  if (!code) return;
+  copyToClipboard(code.textContent);
+  const orig = btn.innerHTML;
+  btn.innerHTML = ICONS.check + ' Copied';
+  setTimeout(() => { btn.innerHTML = orig; }, 2000);
+};
 
 // ── Session management ─────────────────────────────────
 async function createSession() {
@@ -131,14 +216,24 @@ function addSessionToList(id, label) {
 
 function renderSessionList() {
   dom.sessionList.innerHTML = "";
+  const query = (dom.sessionSearch ? dom.sessionSearch.value : "").toLowerCase();
   state.sessions.forEach((s) => {
+    // Filter by search
+    if (query && !s.label.toLowerCase().includes(query)) return;
+
     const el = document.createElement("div");
     el.className = "session-item" + (s.id === state.sessionId ? " active" : "");
-    el.innerHTML = `
-      <span class="session-label">${escHtml(s.label)}</span>
-      <button class="session-delete" title="Delete session">&times;</button>
-    `;
+    el.setAttribute("role", "listitem");
+    el.dataset.id = s.id;
+    el.innerHTML =
+      '<span class="session-label">' + escHtml(s.label) + '</span>'
+      + '<button class="session-action session-rename" title="Rename" aria-label="Rename session">' + ICONS.pencil + '</button>'
+      + '<button class="session-action session-delete" title="Delete" aria-label="Delete session">' + ICONS.trash + '</button>';
     el.querySelector(".session-label").addEventListener("click", () => switchSession(s.id));
+    el.querySelector(".session-rename").addEventListener("click", (e) => {
+      e.stopPropagation();
+      startRenameSession(s.id);
+    });
     el.querySelector(".session-delete").addEventListener("click", (e) => {
       e.stopPropagation();
       deleteSession(s.id);
@@ -147,16 +242,51 @@ function renderSessionList() {
   });
 }
 
+function startRenameSession(id) {
+  const el = dom.sessionList.querySelector('.session-item[data-id="' + id + '"]');
+  if (!el) return;
+  const labelEl = el.querySelector(".session-label");
+  if (!labelEl) return;
+
+  const session = state.sessions.find((s) => s.id === id);
+  const currentLabel = session ? session.label : "Chat";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = currentLabel;
+  input.className = "session-rename-input";
+  input.setAttribute("aria-label", "Rename session");
+  labelEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  function finish() {
+    const newLabel = input.value.trim() || "Chat";
+    if (session) session.label = newLabel;
+    renderSessionList();
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); finish(); }
+    if (e.key === "Escape") { renderSessionList(); }
+  });
+  input.addEventListener("blur", finish);
+}
+
 function switchSession(id) {
   if (state.streaming) return;
+
+  // Close any existing WebSocket — opening a new one would create a fresh session
+  if (state.ws) {
+    state.ws.close();
+    state.ws = null;
+  }
+
   state.sessionId = id;
   dom.messages.innerHTML = "";
-
-  // Load persisted history, then show chat
   loadSessionHistory(id).then(() => {
     showChat();
     renderSessionList();
-    connectWS();
   });
 }
 
@@ -198,21 +328,37 @@ function showChat() {
 }
 
 function addMessage(role, content) {
-  const avatar = role === "user" ? "👤" : "🤖";
+  const avatarSvg = role === "user" ? ICONS.userAvatar : ICONS.botAvatar;
   const html = renderMarkdown(content);
   const el = document.createElement("div");
   el.className = "message " + role;
+
   if (role === "assistant") {
-    el.innerHTML = `
-      <div class="message-avatar">${avatar}</div>
-      <div class="message-body"><div class="message-content">${html}</div></div>
-    `;
+    el.innerHTML =
+      '<div class="message-avatar">' + avatarSvg + '</div>'
+      + '<div class="message-body">'
+      + '<div class="message-content">' + html + '</div>'
+      + '<div class="message-actions">'
+      + '<button class="action-btn copy-btn" aria-label="Copy message">' + ICONS.copy + ' Copy</button>'
+      + '<button class="action-btn regen-btn" aria-label="Regenerate response">' + ICONS.regenerate + ' Regenerate</button>'
+      + '</div>'
+      + '</div>';
   } else {
-    el.innerHTML = `
-      <div class="message-content">${escHtml(content)}</div>
-      <div class="message-avatar">${avatar}</div>
-    `;
+    el.innerHTML =
+      '<div class="message-content">' + escHtml(content) + '</div>'
+      + '<div class="message-avatar">' + avatarSvg + '</div>';
   }
+
+  // Wire action buttons
+  const copyBtn = el.querySelector(".copy-btn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => copyToClipboard(content));
+  }
+  const regenBtn = el.querySelector(".regen-btn");
+  if (regenBtn) {
+    regenBtn.addEventListener("click", () => regenerateLastMessage());
+  }
+
   dom.messages.appendChild(el);
   scrollToBottom();
   return el;
@@ -221,16 +367,15 @@ function addMessage(role, content) {
 function createStreamingMessage() {
   const el = document.createElement("div");
   el.className = "message assistant streaming";
-  el.innerHTML = `
-    <div class="message-avatar">🤖</div>
-    <div class="message-body">
-      <details class="thinking-block" style="display:none">
-        <summary class="thinking-summary">💭 Thinking…</summary>
-        <div class="thinking-content"></div>
-      </details>
-      <div class="message-content"><span class="cursor">▌</span></div>
-    </div>
-  `;
+  el.innerHTML =
+    '<div class="message-avatar">' + ICONS.botAvatar + '</div>'
+    + '<div class="message-body">'
+    + '<details class="thinking-block" style="display:none">'
+    + '<summary class="thinking-summary"><span class="thinking-pulse"></span> Thinking…</summary>'
+    + '<div class="thinking-content"></div>'
+    + '</details>'
+    + '<div class="message-content"><span class="streaming-cursor"></span></div>'
+    + '</div>';
   dom.messages.appendChild(el);
   scrollToBottom();
   return el;
@@ -248,16 +393,44 @@ function updateStreamingReasoning(el, reasoningText) {
 
 function updateStreamingMessage(el, fullText) {
   const contentEl = el.querySelector(".message-content");
-  contentEl.innerHTML = renderMarkdown(fullText) + '<span class="cursor">▌</span>';
+  contentEl.innerHTML = renderMarkdown(fullText) + '<span class="streaming-cursor"></span>';
   scrollToBottom();
 }
 
 function finalizeStreamingMessage(el, fullText) {
   const contentEl = el.querySelector(".message-content");
   contentEl.innerHTML = renderMarkdown(fullText);
+
+  // Update thinking summary
   const summary = el.querySelector(".thinking-summary");
-  if (summary) summary.textContent = "💭 Reasoning (click to expand)";
+  const thinkingBlock = el.querySelector(".thinking-block");
+  if (summary && thinkingBlock) {
+    // Remove the pulse dot
+    const pulse = summary.querySelector(".thinking-pulse");
+    if (pulse) pulse.remove();
+    summary.innerHTML = summary.innerHTML.replace("Thinking…", "Reasoning (click to expand)");
+    // Collapse after finalization
+    thinkingBlock.removeAttribute("open");
+  }
+
   el.classList.remove("streaming");
+
+  // Add message actions
+  const body = el.querySelector(".message-body");
+  if (body && !body.querySelector(".message-actions")) {
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    actions.innerHTML =
+      '<button class="action-btn copy-btn" aria-label="Copy message">' + ICONS.copy + ' Copy</button>'
+      + '<button class="action-btn regen-btn" aria-label="Regenerate response">' + ICONS.regenerate + ' Regenerate</button>';
+    body.appendChild(actions);
+
+    const copyBtn = actions.querySelector(".copy-btn");
+    copyBtn.addEventListener("click", () => copyToClipboard(fullText));
+    const regenBtn = actions.querySelector(".regen-btn");
+    regenBtn.addEventListener("click", () => regenerateLastMessage());
+  }
+
   scrollToBottom();
 }
 
@@ -276,6 +449,27 @@ function setStreaming(on) {
   else dom.msgInput.focus();
 }
 
+// ── Regenerate last message ──────────────────────────────
+function regenerateLastMessage() {
+  if (state.streaming) return;
+  // Find the last user message text
+  const userMsgs = dom.messages.querySelectorAll(".message.user .message-content");
+  if (!userMsgs.length) return;
+  const lastUserText = userMsgs[userMsgs.length - 1].textContent;
+
+  // Remove the last assistant message from DOM
+  const assistantMsgs = dom.messages.querySelectorAll(".message.assistant");
+  if (assistantMsgs.length) assistantMsgs[assistantMsgs.length - 1].remove();
+
+  // Re-send
+  setStreaming(true);
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    sendViaWS(lastUserText);
+  } else {
+    sendViaSSE(lastUserText);
+  }
+}
+
 // ── WebSocket ──────────────────────────────────────────
 function connectWS() {
   if (state.ws) {
@@ -283,7 +477,6 @@ function connectWS() {
     state.ws = null;
   }
 
-  // If auth is required but no key, don't connect
   if (state.authRequired && !state.authKey) {
     showLoginModal();
     return;
@@ -291,7 +484,7 @@ function connectWS() {
 
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const authKey = getAuthKey();
-  const url = `${proto}//${location.host}/api/ws/chat${authKey ? "?api_key=" + encodeURIComponent(authKey) : ""}`;
+  const url = proto + "//" + location.host + "/api/ws/chat" + (authKey ? "?api_key=" + encodeURIComponent(authKey) : "");
 
   const ws = new WebSocket(url);
   let streamEl = null;
@@ -307,7 +500,6 @@ function connectWS() {
 
     if (msg.type === "session") {
       state.sessionId = msg.session_id;
-      // Only add to session list if not already there (switch case)
       if (!state.sessions.find((s) => s.id === msg.session_id)) {
         addSessionToList(msg.session_id, "Chat " + state.sessions.length);
       }
@@ -336,10 +528,10 @@ function connectWS() {
         reasoningText = "";
       }
       setStreaming(false);
-      // Update session label with first user message
+      // Update session label
       const session = state.sessions.find((s) => s.id === state.sessionId);
       if (session && session.label.startsWith("Chat ")) {
-        const firstMsg = dom.messages.querySelector(".user .message-content");
+        const firstMsg = dom.messages.querySelector(".message.user .message-content");
         if (firstMsg) {
           session.label = firstMsg.textContent.slice(0, 30) + (firstMsg.textContent.length > 30 ? "…" : "");
           renderSessionList();
@@ -347,7 +539,7 @@ function connectWS() {
       }
     } else if (msg.type === "error") {
       if (streamEl) {
-        streamText += "\n\n⚠️ **Error:** " + msg.content;
+        streamText += "\n\n**Error:** " + msg.content;
         finalizeStreamingMessage(streamEl, streamText);
         streamEl = null;
         streamText = "";
@@ -401,12 +593,51 @@ async function sendViaSSE(text) {
     headers["X-API-Key"] = authKey;
   }
 
+  // If we don't have a session yet, create one first
+  if (!state.sessionId) {
+    try {
+      const data = await apiFetch("/sessions", { method: "POST" });
+      state.sessionId = data.session_id;
+      addSessionToList(data.session_id, "Chat " + state.sessions.length);
+      showChat();
+    } catch (e) {
+      toast("Failed to create session: " + e.message, "error");
+      if (streamEl) streamEl.remove();
+      setStreaming(false);
+      return;
+    }
+  }
+
   try {
-    const res = await fetch(API + "/chat/stream", {
+    let res = await fetch(API + "/chat/stream", {
       method: "POST",
       headers,
       body: JSON.stringify({ session_id: state.sessionId, message: text }),
     });
+
+    // If session not found (e.g., expired WS session), create a new one and retry
+    if (res.status === 404) {
+      try {
+        const data = await apiFetch("/sessions", { method: "POST" });
+        state.sessionId = data.session_id;
+        addSessionToList(data.session_id, "Chat " + state.sessions.length);
+        res = await fetch(API + "/chat/stream", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ session_id: state.sessionId, message: text }),
+        });
+      } catch (e) {
+        toast("Failed to create session: " + e.message, "error");
+        if (streamEl) streamEl.remove();
+        setStreaming(false);
+        return;
+      }
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -432,10 +663,10 @@ async function sendViaSSE(text) {
             reasoningText += d.reasoning;
             updateStreamingReasoning(streamEl, reasoningText);
           } else if (d.error) {
-            streamText += "\n\n⚠️ **Error:** " + d.error;
+            streamText += "\n\n**Error:** " + d.error;
             updateStreamingMessage(streamEl, streamText);
           }
-        } catch {}
+        } catch (e) { /* skip bad JSON */ }
       }
     }
 
@@ -479,10 +710,27 @@ async function refreshKBStatus() {
   try {
     const data = await apiFetch("/kb/status");
     dom.kbChunks.textContent = data.total_chunks;
-    dom.kbReady.textContent = data.index_ready ? "✅ Ready" : "❌ Not ready";
+    dom.kbReady.innerHTML = data.index_ready
+      ? '<span style="color:var(--accent)">Ready</span>'
+      : '<span style="color:var(--danger)">Not ready</span>';
   } catch (e) {
     dom.kbChunks.textContent = "—";
-    dom.kbReady.textContent = "⚠️ Error";
+    dom.kbReady.textContent = "Error";
+  }
+}
+
+function setKBProgress(on) {
+  if (dom.kbIngestProgress) {
+    if (on) {
+      dom.kbIngestProgress.classList.add("active");
+      dom.kbProgressBar.style.width = "60%";  // Animated indeterminate-like
+    } else {
+      dom.kbProgressBar.style.width = "100%";
+      setTimeout(() => {
+        dom.kbIngestProgress.classList.remove("active");
+        dom.kbProgressBar.style.width = "0%";
+      }, 400);
+    }
   }
 }
 
@@ -491,12 +739,13 @@ async function ingestText() {
   if (!text) { toast("Enter text to ingest", "error"); return; }
   dom.kbIngestBtn.disabled = true;
   dom.kbIngestBtn.textContent = "Ingesting…";
+  setKBProgress(true);
   try {
     const data = await apiFetch("/kb/ingest", {
       method: "POST",
       body: JSON.stringify({ text, source: dom.kbSourceInput.value.trim() || "ui-upload" }),
     });
-    toast(`Added ${data.chunks_added} chunks`, "success");
+    toast("Added " + data.chunks_added + " chunks", "success");
     dom.kbTextInput.value = "";
     dom.kbSourceInput.value = "";
     refreshKBStatus();
@@ -505,25 +754,21 @@ async function ingestText() {
   } finally {
     dom.kbIngestBtn.disabled = false;
     dom.kbIngestBtn.textContent = "Ingest Text";
+    setKBProgress(false);
   }
 }
 
 async function uploadFile() {
   const file = dom.kbFileInput.files[0];
   if (!file) { toast("Select a file first", "error"); return; }
-
   dom.kbUploadBtn.disabled = true;
   dom.kbUploadBtn.textContent = "Uploading…";
-
+  setKBProgress(true);
   try {
     const formData = new FormData();
     formData.append("file", file, file.name);
-
-    const data = await apiFetch("/kb/upload", {
-      method: "POST",
-      body: formData,
-    });
-    toast(`Indexed ${file.name}: ${data.chunks_added} chunks`, "success");
+    const data = await apiFetch("/kb/upload", { method: "POST", body: formData });
+    toast("Indexed " + file.name + ": " + data.chunks_added + " chunks", "success");
     dom.kbFileInput.value = "";
     refreshKBStatus();
   } catch (e) {
@@ -531,6 +776,23 @@ async function uploadFile() {
   } finally {
     dom.kbUploadBtn.disabled = false;
     dom.kbUploadBtn.textContent = "Upload & Ingest";
+    setKBProgress(false);
+  }
+}
+
+async function uploadFileFromDrop(file) {
+  toast("Uploading " + file.name + "…", "info");
+  setKBProgress(true);
+  try {
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    const data = await apiFetch("/kb/upload", { method: "POST", body: formData });
+    toast("Indexed " + file.name + ": " + data.chunks_added + " chunks", "success");
+    refreshKBStatus();
+  } catch (e) {
+    toast("Upload failed for " + file.name + ": " + e.message, "error");
+  } finally {
+    setKBProgress(false);
   }
 }
 
@@ -551,12 +813,15 @@ async function loadPersistedSessions() {
 
 async function resetKB() {
   dom.resetModal.style.display = "none";
+  setKBProgress(true);
   try {
     await apiFetch("/kb/reset", { method: "DELETE" });
     toast("Knowledge base cleared", "success");
     refreshKBStatus();
   } catch (e) {
     toast("Reset failed: " + e.message, "error");
+  } finally {
+    setKBProgress(false);
   }
 }
 
@@ -567,20 +832,54 @@ function autoResize() {
   dom.sendBtn.disabled = !dom.msgInput.value.trim();
 }
 
-// ── Escape HTML ────────────────────────────────────────
-function escHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// ── Modal helpers ──────────────────────────────────────
+function showModal(overlayEl) {
+  state.lastFocusedElement = document.activeElement;
+  overlayEl.style.display = "flex";
+  // Focus first input
+  const input = overlayEl.querySelector("input, button");
+  if (input) input.focus();
+}
+
+function hideModal(overlayEl) {
+  overlayEl.style.display = "none";
+  // Restore focus
+  if (state.lastFocusedElement && state.lastFocusedElement.focus) {
+    state.lastFocusedElement.focus();
+  }
+}
+
+// Trap focus inside modal
+function trapFocus(modalEl) {
+  const focusable = modalEl.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"])');
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  modalEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
 }
 
 // ── Auth UI ────────────────────────────────────────────
 function showLoginModal() {
-  dom.loginModal.style.display = "flex";
+  showModal(dom.loginModal);
   dom.loginApiKey.value = "";
-  dom.loginApiKey.focus();
 }
 
 function hideLoginModal() {
-  dom.loginModal.style.display = "none";
+  hideModal(dom.loginModal);
 }
 
 async function handleLogin(event) {
@@ -597,15 +896,12 @@ async function handleLogin(event) {
   dom.loginSubmitBtn.textContent = "Verifying…";
 
   try {
-    // Test the key by calling a protected endpoint
     await apiFetch("/health/detailed", { method: "GET" });
-    // If successful, store the key
     setStoredAuthKey(key, remember);
     state.authKey = key;
     state.authRequired = true;
     hideLoginModal();
     toast("Authentication successful", "success");
-    // Re-initialize
     refreshKBStatus();
     loadPersistedSessions();
     connectWS();
@@ -629,8 +925,114 @@ async function checkAuthRequired() {
     return true;
   } catch (e) {
     console.warn("[auth] Failed to check auth status:", e);
-    // Assume no auth required if we can't check
     return true;
+  }
+}
+
+// ── Drag-and-drop ──────────────────────────────────────
+function initDragAndDrop() {
+  const mainEl = document.getElementById("main");
+  if (!mainEl) return;
+
+  mainEl.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    state.dragCounter++;
+    if (dom.dropzoneOverlay) dom.dropzoneOverlay.style.display = "flex";
+  });
+
+  mainEl.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    state.dragCounter--;
+    if (state.dragCounter <= 0) {
+      state.dragCounter = 0;
+      if (dom.dropzoneOverlay) dom.dropzoneOverlay.style.display = "none";
+    }
+  });
+
+  mainEl.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+
+  mainEl.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    state.dragCounter = 0;
+    if (dom.dropzoneOverlay) dom.dropzoneOverlay.style.display = "none";
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      for (const file of files) {
+        await uploadFileFromDrop(file);
+      }
+    }
+  });
+}
+
+// ── Keyboard shortcuts ─────────────────────────────────
+function initKeyboardShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    // Escape: close any open modal
+    if (e.key === "Escape") {
+      document.querySelectorAll(".modal-overlay").forEach((m) => {
+        if (m.style.display !== "none") {
+          hideModal(m);
+        }
+      });
+    }
+
+    // Ctrl/Cmd + N: new chat
+    if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+      e.preventDefault();
+      if (!state.streaming) connectWS();
+    }
+
+    // Ctrl/Cmd + Shift + S: toggle sidebar
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "S" || e.key === "s")) {
+      e.preventDefault();
+      dom.sidebar.classList.toggle("collapsed");
+    }
+
+    // Ctrl/Cmd + K: focus session search
+    if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      e.preventDefault();
+      if (dom.sessionSearch && !dom.sidebar.classList.contains("collapsed")) {
+        dom.sessionSearch.focus();
+      }
+    }
+  });
+}
+
+// ── Suggestion cards ───────────────────────────────────
+function initSuggestionCards() {
+  document.querySelectorAll(".suggestion-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const prompt = card.dataset.prompt;
+      if (!prompt) return;
+      dom.msgInput.value = prompt;
+      autoResize();
+      dom.msgInput.focus();
+    });
+  });
+}
+
+// ── Collapsible sidebar sections ───────────────────────
+function initCollapsibleSections() {
+  document.querySelectorAll(".section-toggle").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const section = toggle.closest(".sidebar-section");
+      if (section) {
+        section.classList.toggle("collapsed");
+        toggle.setAttribute("aria-expanded", !section.classList.contains("collapsed"));
+      }
+    });
+  });
+}
+
+// ── Sidebar backdrop (mobile) ──────────────────────────
+function initSidebarBackdrop() {
+  if (dom.sidebarBackdrop) {
+    dom.sidebarBackdrop.addEventListener("click", () => {
+      dom.sidebar.classList.add("collapsed");
+    });
   }
 }
 
@@ -660,21 +1062,36 @@ dom.kbIngestBtn.addEventListener("click", ingestText);
 dom.kbUploadBtn.addEventListener("click", uploadFile);
 
 dom.kbResetBtn.addEventListener("click", () => {
-  dom.resetModal.style.display = "flex";
+  showModal(dom.resetModal);
 });
 dom.resetCancelBtn.addEventListener("click", () => {
-  dom.resetModal.style.display = "none";
+  hideModal(dom.resetModal);
 });
 dom.resetConfirmBtn.addEventListener("click", resetKB);
 
 dom.resetModal.addEventListener("click", (e) => {
-  if (e.target === dom.resetModal) dom.resetModal.style.display = "none";
+  if (e.target === dom.resetModal) hideModal(dom.resetModal);
 });
+
+dom.loginModal.addEventListener("click", (e) => {
+  if (e.target === dom.loginModal) hideModal(dom.loginModal);
+});
+
+// Session search
+if (dom.sessionSearch) {
+  dom.sessionSearch.addEventListener("input", debounce(function () {
+    renderSessionList();
+  }, 200));
+}
 
 // Auth event listeners
 dom.loginForm.addEventListener("submit", handleLogin);
 
-// ── Init ───────────────────────────────────────────────
+// Focus trap for modals
+trapFocus(dom.resetModal.querySelector(".modal"));
+trapFocus(dom.loginModal.querySelector(".modal"));
+
+// ── Init ────────────────────────────────────────────────
 async function init() {
   const authOk = await checkAuthRequired();
   if (authOk) {
@@ -682,6 +1099,11 @@ async function init() {
     loadPersistedSessions();
     connectWS();
   }
+  initDragAndDrop();
+  initKeyboardShortcuts();
+  initSuggestionCards();
+  initCollapsibleSections();
+  initSidebarBackdrop();
 }
 
 init();
