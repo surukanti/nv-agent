@@ -13,7 +13,7 @@ from chat.rate_limit import RateLimitMiddleware, parse_rate_limit
 from chat.routes import router
 from config import config
 
-# UI directory containing index.html, style.css, app.js, marked.min.js
+# UI directory containing React build output (index.html, assets/)
 _UI_DIR = Path(__file__).parent / "ui"
 
 

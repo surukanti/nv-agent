@@ -55,10 +55,24 @@ make compose-logs                 # Follow logs
 ## Architecture — 4 Layers
 
 ```
-chat/ui/     → Browser UI (vanilla HTML/CSS/JS)
+frontend/    → React 18 + TypeScript + Vite + Tailwind v4 (dev)
+chat/ui/     → React production build (served as static files)
 chat/        → FastAPI routes (REST, SSE, WebSocket)
 agent/       → RAG logic (retrieve → augment → generate)
 kb/          → Knowledge base (ingest, chunk, embed, VectorStore)
+```
+
+**Data flow**: User query → embed → VectorStore search (FAISS/Qdrant/ChromaDB) → augment prompt → LLM generate → stream tokens back
+
+**Vector Store Backends** (pluggable via factory pattern):
+- **FAISS** (default) — Zero-infrastructure, local disk index
+- **Qdrant** — High-performance Rust vector DB (starts with all services, select via `NV_AGENT_VECTOR_STORE=qdrant`)
+- **ChromaDB** — Python-based embedding DB (starts with all services, select via `NV_AGENT_VECTOR_STORE=chromadb`)
+
+### Frontend Development
+```bash
+cd frontend && npm run dev          # Vite dev server on :5173 (proxies /api to :8000)
+cd frontend && npm run build:deploy # Build React → chat/ui/ (for Docker)
 ```
 
 **Data flow**: User query → embed → VectorStore search (FAISS/Qdrant/ChromaDB) → augment prompt → LLM generate → stream tokens back

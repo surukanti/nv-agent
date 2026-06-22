@@ -5,6 +5,19 @@
   --color-brand-hover: #8cd000;
   --color-brand-dim: rgba(118, 185, 0, 0.12);
   --color-brand-soft: rgba(118, 185, 0, 0.06);
+  --color-brand-glow: rgba(118, 185, 0, 0.15);
+  --color-brand-glow-strong: rgba(118, 185, 0, 0.35);
+
+  --color-blue: #3b82f6;
+  --color-blue-dim: rgba(59, 130, 246, 0.1);
+  --color-blue-soft: rgba(59, 130, 246, 0.05);
+  --color-amber: #f59e0b;
+  --color-amber-dim: rgba(245, 158, 11, 0.1);
+  --color-amber-soft: rgba(245, 158, 11, 0.05);
+  --color-red: #ef4444;
+  --color-red-dim: rgba(239, 68, 68, 0.1);
+  --color-green: #22c55e;
+
   --color-surface: #18181b;
   --color-elevated: #1e1e22;
   --color-inset: #141416;
@@ -21,10 +34,16 @@
   --max-width-input: 768px;
   --width-sidebar: 300px;
 
+  --shadow-glow: 0 0 0 1px var(--color-brand), 0 0 20px rgba(118, 185, 0, 0.15);
+  --shadow-glow-blue: 0 0 0 1px var(--color-blue), 0 0 20px rgba(59, 130, 246, 0.15);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+
   --animate-welcome-in: welcome-in 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
   --animate-glow-pulse: glow-pulse 3s ease-in-out infinite;
   --animate-cursor-pulse: cursor-pulse 1s ease-in-out infinite;
   --animate-thinking-pulse: thinking-pulse 1.5s ease-in-out infinite;
+  --animate-step-pulse: step-pulse 1.5s ease-in-out infinite;
   --animate-toast-in: toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-toast-out: toast-out 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
   --animate-typing-bounce: typing-bounce 1.4s ease-in-out infinite;
@@ -43,6 +62,10 @@
   @keyframes thinking-pulse {
     0%, 100% { opacity: 0.3; transform: scale(0.8); }
     50% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes step-pulse {
+    0%, 100% { opacity: 0.5; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.1); }
   }
   @keyframes toast-in {
     from { transform: translateX(100%); opacity: 0; }
@@ -90,6 +113,20 @@ button:focus:not(:focus-visible), textarea:focus:not(:focus-visible) { outline: 
     transition-duration: 0s !important;
   }
 }
+
+/* ── Utility Classes ──────────────────────────────────────── */
+.bg-brand-dim { background-color: var(--color-brand-dim); }
+.bg-brand-soft { background-color: var(--color-brand-soft); }
+.bg-blue-dim { background-color: var(--color-blue-dim); }
+.bg-amber-dim { background-color: var(--color-amber-dim); }
+.bg-red-dim { background-color: var(--color-red-dim); }
+.text-brand { color: var(--color-brand); }
+.text-blue { color: var(--color-blue); }
+.text-amber { color: var(--color-amber); }
+.border-brand { border-color: var(--color-brand); }
+.shadow-glow { box-shadow: var(--shadow-glow); }
+.shadow-glow-blue { box-shadow: var(--shadow-glow-blue); }
+.shadow-modal { box-shadow: var(--shadow-modal); }
 
 /* ── Message Content (Markdown) ─────────────────────────── */
 .message-content p { margin: 0 0 8px; }
@@ -162,9 +199,11 @@ button:focus:not(:focus-visible), textarea:focus:not(:focus-visible) { outline: 
 .message-content h2 { font-size: 16px; }
 .message-content h3 { font-size: 15px; }
 
-/* Source citations */
+/* Source citations — distinctive pill badges */
 .source-citation {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   color: var(--color-brand);
   background: var(--color-brand-dim);
@@ -172,9 +211,15 @@ button:focus:not(:focus-visible), textarea:focus:not(:focus-visible) { outline: 
   border-radius: 9999px;
   margin: 4px 2px 4px 0;
   cursor: pointer;
-  transition: background 120ms;
+  transition: all 120ms;
+  font-weight: 500;
+  border: 1px solid transparent;
 }
-.source-citation:hover { background: rgba(118, 185, 0, 0.2); }
+.source-citation:hover {
+  background: rgba(118, 185, 0, 0.2);
+  border-color: rgba(118, 185, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(118, 185, 0, 0.15);
+}
 
 /* ── Thinking / Reasoning Block ─────────────────────────── */
 .thinking-block {
@@ -216,12 +261,53 @@ button:focus:not(:focus-visible), textarea:focus:not(:focus-visible) { outline: 
 }
 .thinking-content p { margin: 0 0 6px; }
 
-/* ── Responsive ──────────────────────────────────────────── */
+/* ── Input Bar ───────────────────────────────────────────── */
+.input-bar-focus {
+  border-color: var(--color-brand) !important;
+  box-shadow: var(--shadow-glow);
+}
+
+/* ── Agent Step Indicator ────────────────────────────────── */
+.step-badge {
+  transition: all 300ms ease;
+}
+.step-badge-current {
+  transform: scale(1.05);
+}
+
+/* ── Toast ───────────────────────────────────────────────── */
+.toast-progress {
+  animation: toast-countdown var(--toast-duration, 5000ms) linear forwards;
+}
+
+/* ── Modal ───────────────────────────────────────────────── */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+}
+.modal-content {
+  box-shadow: var(--shadow-modal);
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar-collapsed {
+  margin-left: calc(var(--width-sidebar) * -1);
+}
+
 @media (max-width: 768px) {
   :root { --width-sidebar: 280px; }
   .message-content { max-width: 85%; }
+  .sidebar-collapsed { margin-left: 0; }
+  .sidebar-open { margin-left: 0; }
 }
 
 @media (max-width: 480px) {
   .feature-pills { display: none; }
+}
+
+/* ── Print ───────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  .message-content { color: #000; }
+  .message-content code { background: #f0f0f0; }
 }
