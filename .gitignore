@@ -41,3 +41,10 @@ docker-compose.override.yml
 
 # Claude Code
 .claude/
+frontend/dist/
+frontend/node_modules/
+
+# Local dev only
+qdrant_data/
+start.sh
+test_qdrant/
