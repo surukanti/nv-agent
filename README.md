@@ -621,24 +621,28 @@ Run NV-Agent in a container — no Python installation needed on the host.
 ```bash
 # Build and run with docker compose
 cp .env.example .env  # Set your NVIDIA API key
-docker compose up -d
+docker compose up -d --build
+
+# Or use the Makefile (also passes --build)
+make compose-up
 
 # Or build manually
 docker build -t nv-agent .
 docker run -p 8000:8000 --env-file .env -v $(pwd)/data:/app/data nv-agent
 ```
 
+> **Note:** `--build` ensures the Docker image is rebuilt with your latest code and UI changes. The Dockerfile uses separate `COPY` layers for Python code and UI assets, so UI-only edits don't invalidate the Python layer cache.
+
 **Docker Compose** persists your documents and FAISS index in named volumes, so they survive container restarts.
 
 ### Option 2: With Qdrant Vector Database (Recommended for Production)
 ```bash
-# Uses docker-compose.yml with Qdrant service
 cp .env.example .env
 # Add to .env:
 # NV_AGENT_VECTOR_STORE=qdrant
 # NV_AGENT_QDRANT_HOST=qdrant
 # NV_AGENT_QDRANT_PORT=6333
-docker compose --profile qdrant up -d
+docker compose up -d --build
 ```
 
 This starts both NV-Agent and Qdrant containers, with Qdrant persisting data in a named volume.
@@ -647,7 +651,7 @@ This starts both NV-Agent and Qdrant containers, with Qdrant persisting data in 
 ```bash
 # Add to .env:
 # NV_AGENT_VECTOR_STORE=chromadb
-docker compose --profile chromadb up -d
+docker compose up -d --build
 ```
 
 ### Custom Configuration

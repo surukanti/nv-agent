@@ -30,11 +30,10 @@ ruff check .
 mypy . --ignore-missing-imports
 
 # Docker Compose
-make compose-up                   # FAISS (default, zero infra)
-make compose-qdrant               # Qdrant vector DB
-make compose-chromadb             # ChromaDB vector DB
-make stack-down                   # Stop all services
-make stack-logs                   # Follow logs
+make compose-up                   # Start all services (rebuilds image first)
+make compose-down                 # Stop all services
+make compose-reset                # Stop, remove volumes, restart (rebuilds image)
+make compose-logs                 # Follow logs
 ```
 
 ### Key URLs (when running)
@@ -66,8 +65,8 @@ kb/          → Knowledge base (ingest, chunk, embed, VectorStore)
 
 **Vector Store Backends** (pluggable via factory pattern):
 - **FAISS** (default) — Zero-infrastructure, local disk index
-- **Qdrant** — High-performance Rust vector DB (Docker profile: `--profile qdrant`)
-- **ChromaDB** — Python-based embedding DB (Docker profile: `--profile chromadb`)
+- **Qdrant** — High-performance Rust vector DB (starts with all services, select via `NV_AGENT_VECTOR_STORE=qdrant`)
+- **ChromaDB** — Python-based embedding DB (starts with all services, select via `NV_AGENT_VECTOR_STORE=chromadb`)
 
 ## Key Patterns
 

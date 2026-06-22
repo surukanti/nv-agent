@@ -410,21 +410,23 @@ nv-agent/
 ### Docker (Recommended)
 
 ```bash
-# FAISS (default, zero external dependencies)
-docker compose up -d
+# All vector store backends start together; select via NV_AGENT_VECTOR_STORE
+docker compose up -d --build
 
-# Qdrant (high-performance Rust vector DB)
-docker compose --profile qdrant up -d
+# Qdrant (high-performance Rust vector DB) — set in .env
+# NV_AGENT_VECTOR_STORE=qdrant
+docker compose up -d --build
 
-# ChromaDB (Python-based vector DB)
-docker compose --profile chromadb up -d
+# ChromaDB (Python-based vector DB) — set in .env
+# NV_AGENT_VECTOR_STORE=chromadb
+docker compose up -d --build
 ```
 
-Set vector store via `NV_ backend in `.env`:
+Set vector store via `NV_AGENT_VECTOR_STORE` in `.env`:
 ```bash
 NV_AGENT_VECTOR_STORE=faiss      # Default
-NV_AGENT_VECTOR_STORE=qdrant     # Requires qdrant profile
-NV_AGENT_VECTOR_STORE=chromadb   # Requires chromadb profile
+NV_AGENT_VECTOR_STORE=qdrant     # Qdrant service starts with all services
+NV_AGENT_VECTOR_STORE=chromadb   # ChromaDB service starts with all services
 ```
 
 ### Quick API Smoke Test
