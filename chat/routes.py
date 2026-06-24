@@ -445,10 +445,8 @@ async def ws_chat(websocket: WebSocket):
         # Don't delete session — sessions persist across connections
     except Exception as exc:
         logger.error("[ws] unexpected error: %s", exc)
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "content": f"Server error: {exc}"})
-        except Exception:
-            pass
     finally:
         # Don't auto-delete session on error either
         pass
