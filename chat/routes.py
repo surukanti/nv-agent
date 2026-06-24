@@ -396,7 +396,9 @@ async def ws_chat(websocket: WebSocket):
     if session_id:
         session = agent.get_session(session_id)
         if session is None:
-            await websocket.send_json({"type": "error", "content": f"Session {session_id} not found"})
+            await websocket.send_json(
+                {"type": "error", "content": f"Session {session_id} not found"}
+            )
             await websocket.close(code=4004)
             return
     else:

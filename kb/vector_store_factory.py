@@ -1,14 +1,20 @@
 """Factory for creating vector store instances based on configuration."""
 
-from kb.vector_store_base import VectorStoreBase
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
 from kb.vector_store_faiss import FAISSVectorStore
+
+if TYPE_CHECKING:
+    from kb.vector_store_base import VectorStoreBase
 
 
 def create_vector_store(
     backend: str,
     index_dir: str,
     embedding_dim: int,
-    **kwargs,
+    **kwargs: Any,
 ) -> VectorStoreBase:
     """Create a vector store instance based on the backend name.
 
@@ -35,13 +41,12 @@ def create_vector_store(
             from kb.vector_store_chromadb import ChromaDBVectorStore
         except ImportError as e:
             raise ImportError(
-                "ChromaDB backend requires 'chromadb' package. "
-                "Install with: pip install chromadb"
+                "ChromaDB backend requires 'chromadb' package. Install with: pip install chromadb"
             ) from e
         return ChromaDBVectorStore(
             index_dir=index_dir,
             embedding_dim=embedding_dim,
-            collection_name=kwargs.get("collection_name", "nv_agent_kb"),
+            collection_name=str(kwargs.get("collection_name", "nv_agent_kb")),
             persist_directory=kwargs.get("persist_directory"),
         )
 
@@ -56,7 +61,7 @@ def create_vector_store(
         return QdrantVectorStore(
             index_dir=index_dir,
             embedding_dim=embedding_dim,
-            collection_name=kwargs.get("collection_name", "nv_agent_kb"),
+            collection_name=str(kwargs.get("collection_name", "nv_agent_kb")),
             host=kwargs.get("host"),
             port=kwargs.get("port"),
             api_key=kwargs.get("api_key"),
@@ -65,12 +70,11 @@ def create_vector_store(
 
     else:
         raise ValueError(
-            f"Unknown vector store backend: {backend}. "
-            f"Supported: faiss, chromadb, qdrant"
+            f"Unknown vector store backend: {backend}. Supported: faiss, chromadb, qdrant"
         )
 
 
-def get_vector_store_config() -> dict:
+def get_vector_store_config() -> dict[str, Any]:
     """Get vector store configuration from environment variables.
 
     Returns:
@@ -80,25 +84,19 @@ def get_vector_store_config() -> dict:
 
     backend = os.environ.get("NV_AGENT_VECTOR_STORE", "faiss").lower()
 
-    config = {"backend": backend}
+    config: dict[str, Any] = {"backend": backend}
 
     if backend == "chromadb":
         config.update(
             {
-                "collection_name": os.environ.get(
-                    "NV_AGENT_CHROMADB_COLLECTION", "nv_agent_kb"
-                ),
-                "persist_directory": os.environ.get(
-                    "NV_AGENT_CHROMADB_PERSIST_DIR"
-                ),
+                "collection_name": os.environ.get("NV_AGENT_CHROMADB_COLLECTION", "nv_agent_kb"),
+                "persist_directory": os.environ.get("NV_AGENT_CHROMADB_PERSIST_DIR"),
             }
         )
     elif backend == "qdrant":
         config.update(
             {
-                "collection_name": os.environ.get(
-                    "NV_AGENT_QDRANT_COLLECTION", "nv_agent_kb"
-                ),
+                "collection_name": os.environ.get("NV_AGENT_QDRANT_COLLECTION", "nv_agent_kb"),
                 "host": os.environ.get("NV_AGENT_QDRANT_HOST"),
                 "port": (
                     int(os.environ.get("NV_AGENT_QDRANT_PORT", "6333"))
