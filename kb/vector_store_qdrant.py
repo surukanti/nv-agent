@@ -5,8 +5,8 @@ vector search with filtering capabilities. Can run in-memory, local file-based, 
 as a standalone server.
 """
 
+import contextlib
 import os
-from typing import TYPE_CHECKING, Optional
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -14,9 +14,6 @@ from qdrant_client.http import models
 from kb.chunker import Chunk
 from kb.embed import embed_query, embed_texts
 from kb.vector_store_base import SearchResult, VectorStoreBase
-
-if TYPE_CHECKING:
-    from qdrant_client.http.models import ScoredPoint
 
 
 class QdrantVectorStore(VectorStoreBase):
@@ -31,11 +28,11 @@ class QdrantVectorStore(VectorStoreBase):
         embedding_dim: int = 1024,
         collection_name: str = "nv_agent_kb",
         # Remote server mode
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        api_key: Optional[str] = None,
+        host: str | None = None,
+        port: int | None = None,
+        api_key: str | None = None,
         # Local mode
-        path: Optional[str] = None,
+        path: str | None = None,
     ):
         super().__init__(index_dir, embedding_dim)
         self.collection_name = collection_name
@@ -83,7 +80,7 @@ class QdrantVectorStore(VectorStoreBase):
             return
 
         points = []
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
+        for _i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
             point_id = hash(f"{chunk.source}_{chunk.chunk_index}") % (2**63 - 1)
             points.append(
                 models.PointStruct(
@@ -112,7 +109,7 @@ class QdrantVectorStore(VectorStoreBase):
         if not query_vec:
             return []
 
-         from qdrant_client.http.models import SearchParams
+        from qdrant_client.http.models import SearchParams
 
         results = self._client.query_points(
             collection_name=self.collection_name,
@@ -150,10 +147,8 @@ class QdrantVectorStore(VectorStoreBase):
 
     def reset(self) -> None:
         """Drop all data and reset the index."""
-        try:
+        with contextlib.suppress(Exception):
             self._client.delete_collection(collection_name=self.collection_name)
-        except Exception:
-            pass
         self._ensure_collection()
 
     @property

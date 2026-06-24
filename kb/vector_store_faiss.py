@@ -2,7 +2,6 @@
 
 import json
 import os
-from typing import TYPE_CHECKING
 
 import faiss
 import numpy as np

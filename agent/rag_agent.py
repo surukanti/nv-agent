@@ -87,7 +87,7 @@ class LLMError(RAGAgentError):
 class RAGAgent:
     """Retrieval-Augmented Generation agent backed by NVIDIA LLM + vector store."""
 
-    def __init__(self, store: "VectorStoreBase", session_store: SessionStore | None = None):
+    def __init__(self, store: VectorStoreBase, session_store: SessionStore | None = None):
         self.store = store
         self.sessions: dict[str, Session] = {}
         self._client: OpenAI | None = None

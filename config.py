@@ -64,19 +64,13 @@ class KBConfig:
         # Read backend-specific options from env
         if self.vector_store == "chromadb":
             self.vector_store_options = {
-                "collection_name": os.environ.get(
-                    "NV_AGENT_CHROMADB_COLLECTION", "nv_agent_kb"
-                ),
-                "persist_directory": os.environ.get(
-                    "NV_AGENT_CHROMADB_PERSIST_DIR"
-                ),
+                "collection_name": os.environ.get("NV_AGENT_CHROMADB_COLLECTION", "nv_agent_kb"),
+                "persist_directory": os.environ.get("NV_AGENT_CHROMADB_PERSIST_DIR"),
             }
         elif self.vector_store == "qdrant":
             port_str = os.environ.get("NV_AGENT_QDRANT_PORT")
             self.vector_store_options = {
-                "collection_name": os.environ.get(
-                    "NV_AGENT_QDRANT_COLLECTION", "nv_agent_kb"
-                ),
+                "collection_name": os.environ.get("NV_AGENT_QDRANT_COLLECTION", "nv_agent_kb"),
                 "host": os.environ.get("NV_AGENT_QDRANT_HOST"),
                 "port": int(port_str) if port_str else None,
                 "api_key": os.environ.get("NV_AGENT_QDRANT_API_KEY"),

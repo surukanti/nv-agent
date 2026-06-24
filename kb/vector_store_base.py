@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from kb.chunker import Chunk
@@ -46,7 +46,7 @@ class VectorStoreBase(ABC):
 
     @property
     @abstractmethod
-    def index(self) -> Optional[object]:
+    def index(self) -> object | None:
         """Return the underlying index object if available (for status checks)."""
         ...
 

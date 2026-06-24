@@ -5,8 +5,9 @@ and efficient vector search. It's a good alternative to FAISS when you need
 a standalone database server or more features.
 """
 
+import contextlib
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import chromadb
 from chromadb.config import Settings
@@ -30,13 +31,13 @@ class ChromaDBVectorStore(VectorStoreBase):
         index_dir: str,
         embedding_dim: int = 1024,
         collection_name: str = "nv_agent_kb",
-        persist_directory: Optional[str] = None,
+        persist_directory: str | None = None,
     ):
         super().__init__(index_dir, embedding_dim)
         self.collection_name = collection_name
         self.persist_directory = persist_directory or os.path.join(index_dir, "chromadb")
-        self._client: Optional[chromadb.PersistentClient] = None
-        self._collection: Optional["Collection"] = None
+        self._client: chromadb.PersistentClient | None = None
+        self._collection: Collection | None = None
         os.makedirs(self.persist_directory, exist_ok=True)
         self._init_client()
 
@@ -131,10 +132,8 @@ class ChromaDBVectorStore(VectorStoreBase):
 
     def reset(self) -> None:
         """Drop all data and reset the index."""
-        try:
+        with contextlib.suppress(Exception):
             self._client.delete_collection(name=self.collection_name)
-        except Exception:
-            pass
         self._collection = self._client.get_or_create_collection(
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"},
