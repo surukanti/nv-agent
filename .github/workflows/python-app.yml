@@ -1,0 +1,43 @@
+# This workflow runs lint and tests for Python application.
+
+name: Python Application
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Lint with flake8
+        run: |
+          # Stop on Python syntax errors or undefined names
+          flake8 . --exclude=.venv,venv,build,dist --count --select=E9,F63,F7 --show-source --statistics
+          # Exit-zero treats all errors as warnings
+          flake8 . --exclude=.venv,venv,build,dist --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Test with pytest
+        run: pytest tests/ -v --tb=short
+        env:
+          NVIDIA_API_KEY: nvapi-test-ci-key
+          PYTHONPATH: .
