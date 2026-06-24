@@ -1,36 +1,96 @@
 # ── GitHub Actions: Build & Push Multi-arch Docker Image to GHCR ──────
-# Triggers: push to main, tags (v*), manual dispatch
-# Requires: Settings → Actions → General → Workflow permissions: "Read and write"
-#           Packages: GHCR pushed to ghcr.io/OWNER/nv-agent
+# Triggers: push to main, tags (v*), manual dispatch, pull_request
+# Requires: Repo Settings > Actions > General > Workflow permissions: "Read and write"
+#           And: Settings > Actions > General > Allow GitHub Actions to create...
+#           GHCR: Pushed to ghcr.io/OWNER/REPO
 
 name: Build & Publish Docker Image
 
 on:
   push:
     branches: [main]
-    tags: ['v*']          # v1.0.0, v1.2.3, etc.
+    tags: ['v*']
   pull_request:
     branches: [main]
-  workflow_dispatch:      # Manual trigger in Actions tab
+  workflow_dispatch:
     inputs:
       tag:
         description: 'Optional tag override (e.g., v1.0.0-rc1)'
         required: false
         type: string
 
+# Workflow-level permissions
 permissions:
   contents: read
-  packages: write         # Required to push to GHCR
-  id-token: write         # For provenance attestation
+  packages: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
+  # github.repository = "surukanti/nv-agent" (owner/repo format for GHCR)
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
+  # ═══════════════════════════════════════════════════════════════════
+  # BUILD TEST — Runs on PRs, validates Dockerfile builds correctly
+  # ═══════════════════════════════════════════════════════════════════
+  build-test:
+    name: Build Test (no push)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Debug - List workspace
+        run: |
+          echo "=== Workspace contents ==="
+          ls -la
+          echo ""
+          echo "=== chat/ contents ==="
+          ls -la chat/ || true
+          echo ""
+          echo "=== chat/ui/ contents ==="
+          ls -la chat/ui/ || true
+          echo ""
+          echo "=== agent/ contents ==="
+          ls -la agent/ || true
+          echo ""
+          echo "=== kb/ contents ==="
+          ls -la kb/ || true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: latest
+
+      - name: Build Docker image (single arch, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: false
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test-${{ github.sha }}
+          load: true
+          # Fail fast on build errors
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VCS_URL=${{ github.server_url }}/${{ github.repository }}
+
+  # ═══════════════════════════════════════════════════════════════════
+  # BUILD & PUSH — Multi-arch, pushes to GHCR on main/tags/dispatch
+  # ═══════════════════════════════════════════════════════════════════
+  build-and-push:
+    name: Build & Push Multi-arch
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    # Only run on: push to main, tag push, or manual dispatch
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
@@ -41,11 +101,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Set up QEMU for multi-arch
+      # 2. Debug - Verify context
+      - name: Debug - Verify build context
+        run: |
+          echo "Repository: ${{ github.repository }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "SHA: ${{ github.sha }}"
+          echo ""
+          echo "=== Files in context ==="
+          find . -type f -name "*.py" | head -20
+          echo "..."
+          find . -type f -path "./chat/ui/*" | head -10
+          echo ""
+
+      # 3. Set up QEMU (multi-arch emulation)
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 3. Set up Docker Buildx (multi-arch builder)
+      # 4. Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -53,7 +128,7 @@ jobs:
           driver-opts: |
             image=moby/buildkit:v0.16.0
 
-      # 4. Login to GHCR
+      # 5. Login to GHCR
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -61,7 +136,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 5. Extract metadata (tags, labels)
+      # 6. Extract metadata (tags, labels)
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -76,50 +151,42 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event.inputs.tag != '' && github.event_name == 'workflow_dispatch' }}
 
-      # 6. Build & push multi-arch
+      # 7. Build & push multi-arch
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Build args (optional — can pass version info)
+          pull: true
           build-args: |
             BUILD_DATE=${{ steps.meta.outputs.created }}
             VCS_REF=${{ github.sha }}
             VCS_URL=${{ github.server_url }}/${{ github.repository }}
 
-      # 7. Output summary
+      # 8. Output summary
       - name: Image digest
-        if: github.event_name != 'pull_request'
         run: |
           echo "Image pushed to GHCR"
+          echo "Repository: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           echo "Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Digest: ${{ steps.build.outputs.digest }}"
           for tag in ${{ steps.meta.outputs.tags }}; do
             echo "  - docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$tag"
           done
 
-  # Optional: Deploy to remote server via SSH (comment out if not needed)
-  # deploy:
-  #   needs: build-and-push
-  #   if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 10
-  #
-  #   steps:
-  #     - name: Deploy to production
-  #       uses: appleboy/ssh-action@v1
-  #       with:
-  #         host: ${{ secrets.DEPLOY_HOST }}
-  #         username: ${{ secrets.DEPLOY_USER }}
-  #         key: ${{ secrets.DEPLOY_SSH_KEY }}
-  #         script: |
-  #           cd /opt/nv-agent
-  #           docker compose -f docker-compose.prod.yml pull
-  #           docker compose -f docker-compose.prod.yml up -d --remove-orphans
-  #           docker image prune -f
+      # 9. Verify image exists in GHCR
+      - name: Verify GHCR image
+        if: success()
+        run: |
+          echo "Waiting for GHCR propagation..."
+          sleep 5
+          # List tags for the image
+          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://ghcr.io/v2/${{ env.IMAGE_NAME }}/tags/list" | jq . || true
