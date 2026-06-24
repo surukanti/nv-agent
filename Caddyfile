@@ -1,0 +1,56 @@
+# ── Caddyfile for NV-Agent ──────────────────────────────────────────
+# Automatic HTTPS via Let's Encrypt
+# Replace yourdomain.com with your actual domain
+# Ensure DNS A record points to this server's public IP
+
+{
+    # Email for Let's Encrypt renewal notifications (optional)
+    # email you@example.com
+
+    # Optional: disable HTTP challenge if behind Cloudflare/other proxy
+    # acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+# Main domain — serves NV-Agent UI + API
+yourdomain.com {
+    # Security headers
+    header {
+        # HSTS (uncomment after confirming HTTPS works)
+        # Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    # Compress responses
+    encode zstd gzip
+
+    # Rate limit API (optional — app also has rate limiting)
+    # rate_limit {
+    #     zone api 10r/s
+    #     key {remote}
+    # }
+
+    # Proxy all traffic to nv-agent container
+    reverse_proxy nv-agent:8000 {
+        # WebSocket support
+        flush_interval -1
+
+        # Timeouts
+        transport http {
+            read_timeout  300s
+            write_timeout 300s
+        }
+    }
+
+    # Optional: Redirect www → apex
+    # www.yourdomain.com {
+    #     redir https://yourdomain.com{uri} permanent
+    # }
+}
+
+# Optional: Health check endpoint (no auth, no rate limit)
+# yourdomain.com/healthz {
+#     respond "ok" 200
+# }

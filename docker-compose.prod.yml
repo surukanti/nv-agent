@@ -1,0 +1,149 @@
+# ── NV-Agent Production Docker Compose ───────────────────────────────
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml logs -f
+#   docker compose -f docker-compose.prod.yml down
+#
+# Requires:
+#   - .env.prod with NVIDIA_NIM_API_KEY and other settings
+#   - Caddyfile (or use your own reverse proxy)
+#   - Pre-built image from GHCR (or build locally and tag)
+#
+# Vector Store: set NV_AGENT_VECTOR_STORE in .env.prod
+#   - faiss   (default): zero-infrastructure, uses nv-agent-index volume
+#   - qdrant:  uncomment qdrant service + vectors in nv-agent env
+#   - chromadb: uncomment chromadb service + vectors in nv-agent env
+
+services:
+  # ── Main App ───────────────────────────────────────────────────────
+  nv-agent:
+    image: ghcr.io/${GHCR_OWNER:-yourusername}/nv-agent:${IMAGE_TAG:-latest}
+    container_name: nv-agent
+    env_file:
+      - .env.prod
+    environment:
+      - NV_HOST=0.0.0.0
+      - NV_PORT=8000
+      # Vector store
+      - NV_AGENT_VECTOR_STORE=${NV_AGENT_VECTOR_STORE:-faiss}
+      # Qdrant (uncomment qdrant service below if using)
+      - NV_AGENT_QDRANT_HOST=${NV_AGENT_QDRANT_HOST:-qdrant}
+      - NV_AGENT_QDRANT_PORT=${NV_AGENT_QDRANT_PORT:-6333}
+      # ChromaDB (uncomment chromadb service below if using)
+      - NV_AGENT_CHROMADB_PERSIST_DIR=${NV_AGENT_CHROMADB_PERSIST_DIR:-/app/kb/index/chromadb}
+    volumes:
+      # Named volumes — persist across deployments, no host path dependency
+      - nv-agent-data:/app/data
+      - nv-agent-index:/app/kb/index
+      - nv-agent-sessions:/app/data/sessions
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Resource limits — adjust to your server capacity
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    # Logging (Docker default json-file with rotation)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Reverse Proxy (Caddy — automatic HTTPS via Let's Encrypt) ──────
+  # Requires: Caddyfile in same dir, ports 80/443 open on host
+  caddy:
+    image: caddy:2-alpine
+    container_name: nv-agent-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    environment:
+      # Optional: ACME email for Let's Encrypt notifications
+      - ACME_EMAIL=${ACME_EMAIL:-}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Qdrant Vector DB (uncomment if NV_AGENT_VECTOR_STORE=qdrant) ──
+  # qdrant:
+  #   image: qdrant/qdrant:v1.18.0
+  #   container_name: nv-agent-qdrant
+  #   # No port exposure needed — internal network only
+  #   volumes:
+  #     - qdrant-data:/qdrant/storage
+  #   environment:
+  #     - QDRANT__SERVICE__HTTP_PORT=6333
+  #     - QDRANT__SERVICE__GRPC_PORT=6334
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 10s
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '1.0'
+  #         memory: 2G
+
+  # ── ChromaDB Vector DB (uncomment if NV_AGENT_VECTOR_STORE=chromadb) ─
+  # chromadb:
+  #   image: chromadb/chroma:1.0.6
+  #   container_name: nv-agent-chromadb
+  #   volumes:
+  #     - chromadb-data:/chroma/chroma
+  #   environment:
+  #     - CHROMA_SERVER_HOST=0.0.0.0
+  #     - CHROMA_SERVER_HTTP_PORT=8000
+  #     - ANONYMIZED_TELEMETRY=False
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 10s
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '1.0'
+  #         memory: 2G
+
+volumes:
+  nv-agent-data:
+    driver: local
+  nv-agent-index:
+    driver: local
+  nv-agent-sessions:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local
+  # qdrant-data:
+  #   driver: local
+  # chromadb-data:
+  #   driver: local
+
+networks:
+  default:
+    name: nv-agent-prod

@@ -688,6 +688,53 @@ docker run -p 8000:8000 \
 
 ---
 
+### Production Deployment (Remote Server)
+
+For production on a remote VPS/server, use the production compose file with a reverse proxy:
+
+```bash
+# 1. Copy production files to server
+scp docker-compose.prod.yml Caddyfile .env.prod.example user@your-server:~/
+
+# 2. On server: setup
+ssh user@your-server
+mkdir -p /opt/nv-agent && cd /opt/nv-agent
+cp ~/docker-compose.prod.yml ~/Caddyfile .
+cp .env.prod.example .env.prod   # Edit with your API keys, domain
+
+# 3. Configure Caddyfile: replace 'yourdomain.com' with your actual domain
+# 4. Configure .env.prod: add NVIDIA_NIM_API_KEY, NV_AGENT_AUTH_KEY, etc.
+
+# 5. Deploy (uses pre-built GHCR image)
+docker compose -f docker-compose.prod.yml up -d
+
+# Or use the deploy script from local machine
+./deploy.sh --logs
+```
+
+**Production compose** (`docker-compose.prod.yml`) includes:
+- **Pre-built GHCR image** (no build on server)
+- **Named volumes only** (no host path dependencies)
+- **Resource limits** (CPU/memory)
+- **Log rotation** (10MB, 3 files)
+- **Caddy reverse proxy** (automatic HTTPS via Let's Encrypt)
+- **Health checks** with restart policies
+
+**Required environment** (`.env.prod`):
+```bash
+NVIDIA_NIM_API_KEY=nvapi-your-key
+NV_AGENT_AUTH_KEY=your-secure-random-key  # openssl rand -hex 32
+NV_AGENT_RATE_LIMIT=60/minute
+NV_AGENT_VECTOR_STORE=faiss  # or qdrant/chromadb
+ACME_EMAIL=you@example.com  # for Let's Encrypt (optional)
+```
+
+**CI/CD:** Push to `main` or tag `v*` → GitHub Actions builds multi-arch image → pushes to GHCR. Server pulls via `docker compose pull`.
+
+---
+
+## 🔒 Security
+
 ## 🔒 Security
 
 | Measure | Details |
