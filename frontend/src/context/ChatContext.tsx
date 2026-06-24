@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { apiFetch, getAuthKey } from '../services/api';
+import { SESSION_ID_STORAGE } from '../utils/constants';
 import type { Session, HistoryMessage } from '../types/api';
 import type { Message, AgentStep } from '../types/chat';
 import { useToast } from './ToastContext';
@@ -145,11 +146,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       wsRef.current = null;
     }
 
+    // Restore saved session ID if not provided (page refresh)
+    const effectiveSessionId = sessionId || sessionStorage.getItem(SESSION_ID_STORAGE) || undefined;
+
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const authKey = getAuthKey();
     const params = new URLSearchParams();
     if (authKey) params.set('api_key', authKey);
-    if (sessionId) params.set('session_id', sessionId);
+    if (effectiveSessionId) params.set('session_id', effectiveSessionId);
     const url = `${proto}//${location.host}/api/ws/chat?${params.toString()}`;
 
     const ws = new WebSocket(url);
@@ -160,8 +164,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       if (msg.type === 'session') {
         dispatch({ type: 'SET_CURRENT_SESSION', id: msg.session_id });
+        // Persist session ID for page refresh survival
+        sessionStorage.setItem(SESSION_ID_STORAGE, msg.session_id);
         if (!s.sessions.find(sess => sess.id === msg.session_id)) {
           dispatch({ type: 'ADD_SESSION', session: { id: msg.session_id, label: `Chat ${s.sessions.length}` } });
+        }
+        // Load history for this session (covers refresh reconnect)
+        if (effectiveSessionId) {
+          apiFetch<{ messages: HistoryMessage[] }>(`/sessions/${msg.session_id}/history?limit=100`)
+            .then(data => {
+              const messages: Message[] = (data.messages || []).map(m => ({
+                id: `hist-${Math.random().toString(36).slice(2)}`,
+                role: m.role,
+                content: m.content,
+                timestamp: undefined,
+              }));
+              dispatch({ type: 'SET_MESSAGES', messages });
+            })
+            .catch(e => console.warn('[load-history] failed:', e));
         }
       } else if (msg.type === 'reasoning') {
         dispatch({ type: 'APPEND_REASONING', content: msg.content });
@@ -208,6 +228,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       wsRef.current.close();
       wsRef.current = null;
     }
+    // Clear saved session so connectWS won't restore it
+    sessionStorage.removeItem(SESSION_ID_STORAGE);
+    dispatch({ type: 'SET_MESSAGES', messages: [] });
     // Don't pass sessionId — backend will create a new session
     connectWS();
   }, [connectWS]);
@@ -221,6 +244,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     dispatch({ type: 'SET_CURRENT_SESSION', id });
+    // Persist the session we're switching to
+    sessionStorage.setItem(SESSION_ID_STORAGE, id);
     dispatch({ type: 'SET_MESSAGES', messages: [] });
 
     try {
@@ -245,6 +270,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'REMOVE_SESSION', id });
       const s = stateRef.current;
       if (id === s.currentSessionId) {
+        sessionStorage.removeItem(SESSION_ID_STORAGE);
         dispatch({ type: 'SET_CURRENT_SESSION', id: null });
         dispatch({ type: 'SET_MESSAGES', messages: [] });
       }

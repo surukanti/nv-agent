@@ -1,6 +1,7 @@
 export const API_BASE = '/api';
 
 export const AUTH_KEY_STORAGE = 'nv_agent_auth_key';
+export const SESSION_ID_STORAGE = 'nv_agent_session_id';
 
 export const SUPPORTED_EXTENSIONS = '.txt,.md,.py,.json,.yaml,.yml,.csv,.html,.xml,.rst,.pdf,.docx';
 
