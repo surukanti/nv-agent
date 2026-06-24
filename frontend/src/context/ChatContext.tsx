@@ -139,7 +139,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const connectWS = useCallback(() => {
+  const connectWS = useCallback((sessionId?: string) => {
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -147,7 +147,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const authKey = getAuthKey();
-    const url = `${proto}//${location.host}/api/ws/chat${authKey ? '?api_key=' + encodeURIComponent(authKey) : ''}`;
+    const params = new URLSearchParams();
+    if (authKey) params.set('api_key', authKey);
+    if (sessionId) params.set('session_id', sessionId);
+    const url = `${proto}//${location.host}/api/ws/chat?${params.toString()}`;
 
     const ws = new WebSocket(url);
 
@@ -205,6 +208,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       wsRef.current.close();
       wsRef.current = null;
     }
+    // Don't pass sessionId — backend will create a new session
     connectWS();
   }, [connectWS]);
 
@@ -228,10 +232,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         timestamp: undefined,
       }));
       dispatch({ type: 'SET_MESSAGES', messages });
+      // Reconnect WebSocket with this session ID
+      connectWS(id);
     } catch (e) {
       console.warn('[load-history] failed:', e);
     }
-  }, []);
+  }, [connectWS]);
 
   const deleteSession = useCallback(async (id: string) => {
     try {

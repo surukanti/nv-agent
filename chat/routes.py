@@ -27,7 +27,7 @@ router = APIRouter()
 
 # ── Shared state (initialized at startup) ──────────────────────────
 _agent: RAGAgent | None = None
-_store: "VectorStoreBase" | None = None
+_store: VectorStoreBase | None = None
 
 
 def set_agent(agent: RAGAgent) -> None:
@@ -35,7 +35,7 @@ def set_agent(agent: RAGAgent) -> None:
     _agent = agent
 
 
-def set_store(store: "VectorStoreBase") -> None:
+def set_store(store: VectorStoreBase) -> None:
     global _store
     _store = store
 
@@ -46,7 +46,7 @@ def _get_agent() -> RAGAgent:
     return _agent
 
 
-def _get_store() -> "VectorStoreBase":
+def _get_store() -> VectorStoreBase:
     if _store is None:
         raise HTTPException(status_code=503, detail="Knowledge base not initialized")
     return _store
@@ -388,9 +388,20 @@ async def ws_chat(websocket: WebSocket):
     await websocket.accept()
     agent = _get_agent()
 
-    # Create a session for this WebSocket connection
-    session = agent.create_session()
-    await websocket.send_json({"type": "session", "session_id": session.id})
+    # Accept optional session_id from query params
+    # If provided, use existing session; otherwise create new one
+    query_params = dict(websocket.query_params)
+    session_id = query_params.get("session_id")
+
+    if session_id:
+        session = agent.get_session(session_id)
+        if session is None:
+            await websocket.send_json({"type": "error", "content": f"Session {session_id} not found"})
+            await websocket.close(code=4004)
+            return
+    else:
+        session = agent.create_session()
+        await websocket.send_json({"type": "session", "session_id": session.id})
 
     try:
         while True:
@@ -430,16 +441,17 @@ async def ws_chat(websocket: WebSocket):
                     break
 
     except WebSocketDisconnect:
-        logger.info("[ws] client disconnected, cleaning up session %s", session.id)
-        agent.delete_session(session.id)
+        logger.info("[ws] client disconnected, session %s kept alive", session.id)
+        # Don't delete session — sessions persist across connections
     except Exception as exc:
         logger.error("[ws] unexpected error: %s", exc)
         try:
             await websocket.send_json({"type": "error", "content": f"Server error: {exc}"})
         except Exception:
             pass
-        finally:
-            agent.delete_session(session.id)
+    finally:
+        # Don't auto-delete session on error either
+        pass
 
 
 # ── Knowledge base management ───────────────────────────────────────
