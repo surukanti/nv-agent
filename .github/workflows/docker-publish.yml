@@ -1,5 +1,6 @@
-# ── GitHub Actions: Build & Push Multi-arch Docker Image to GHCR ──────
-# Minimal working workflow - triggers on push to main and tags
+# ── GitHub Actions: Build & Push Docker Image to GHCR ──────
+# Single arch (amd64) first, push to GHCR
+# Triggers: push to main, tags (v*)
 
 name: Build & Publish Docker Image
 
@@ -60,16 +61,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push (single arch first)
+      - name: Build and push (single arch amd64)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          load: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Success
+      - name: Verify image
         run: |
-          echo "Image pushed to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "Image pushed to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "Tags: latest, ${{ github.sha }}"
