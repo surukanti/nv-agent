@@ -49,7 +49,7 @@
 | **Generic AI = generic answers** | Off-the-shelf chatbots hallucinate about your domain because they don't know your data | RAG pipeline retrieves your documents before answering — every response is grounded in your knowledge base |
 | **RAG is hard to set up** | Most RAG tutorials leave you with a notebook, not a production-ready app | One command starts a complete system: vector store, embeddings, LLM, session persistence, and browser UI |
 | **Knowledge trapped in files** | PDFs, DOCX, and text docs sit in folders — unsearchable, unqueryable | Drop 12+ file formats into `data/` and they're instantly indexed and queryable |
-| **Conversations are lost** | Most demo chatbots forget everything when you refresh | Every session is persisted to disk with atomic writes — survives restarts and crashes |
+| **Conversations survive refresh** | Most demo chatbots lose everything when you refresh the browser | Session ID saved to sessionStorage — page refresh reconnects to the same session with full history |
 | **No infrastructure for AI** | Running LLMs locally requires GPUs, drivers, and model management | NVIDIA NIM gives you hosted state-of-the-art models via a single API key — zero local GPU needed |
 
 ---
@@ -123,7 +123,7 @@ NVIDIA NIM (NVIDIA Inference Microservices) provides hosted, state-of-the-art op
 
 | Layer | Package | Responsibility |
 |-------|---------|---------------|
-| **Presentation** | `chat/ui/` | Browser UI — vanilla HTML/CSS/JS, WebSocket + SSE + REST |
+| **Presentation** | `chat/ui/` | Browser UI — React 18 + TypeScript + Tailwind v4 (built from `frontend/`) |
 | **API** | `chat/` | FastAPI routes, CORS, request/response models, streaming |
 | **Agent** | `agent/` | RAG logic (retrieve → augment → generate), session management |
 | **Knowledge Base** | `kb/` | Document ingestion, chunking, embedding, pluggable vector store (FAISS/Qdrant/ChromaDB) |
@@ -290,6 +290,7 @@ Conversations survive server restarts. Every message is timestamped and saved to
 | **Multi-format ingestion** | Drop in `.pdf`, `.docx`, `.txt`, `.md`, `.py`, `.json`, `.yaml`, `.yml`, `.csv`, `.html`, `.xml`, `.rst` — auto-indexed on startup |
 | **Smart chunking** | Paragraph-aware → sentence-aware → word-boundary splitting with overlap — no cutting mid-sentence |
 | **Session persistence** | Conversations survive server restarts. Every message is timestamped and saved to disk atomically |
+| **Session continuity on refresh** | Session ID saved to `sessionStorage` — page refresh reconnects to the same session with full history |
 | **Browser file upload** | Upload PDFs and Word docs directly from the UI — no CLI needed |
 | **Dark-themed chat UI** | Responsive single-page interface — sidebar, session management, KB status panel |
 | **Multi-model support** | Any model on NVIDIA NIM (Nemotron, Llama, DeepSeek, etc.) — just change one config value |
@@ -325,11 +326,11 @@ nv-agent/
 │   └── sessions/            #    Persisted conversation JSONs (auto-created)
 │
 ├── kb/                      # 🧠 Knowledge Base Layer
-│   ├── __init__.py          #    Exports: VectorStore, Chunk, ingest_*, chunk_text
+│   ├── __init__.py          #    Exports: VectorStoreBase, Chunk, ingest_*, chunk_text
 │   ├── chunker.py           #    Multi-level text splitting (paragraph→sentence→word)
 │   ├── embed.py             #    NVIDIA embedding client (singleton, batched, error-handled)
 │   ├── ingest.py            #    File ingestion + readers (PDF, DOCX, 10 text formats)
-│   ├── vector_store.py              #    Abstract base class (VectorStoreBase)
+│   ├── vector_store_base.py     #    Abstract base class (VectorStoreBase)
 │   ├── vector_store_faiss.py        #    FAISS vector store implementation
 │   ├── vector_store_qdrant.py       #    Qdrant vector store implementation
 │   ├── vector_store_chromadb.py     #    ChromaDB vector store implementation
@@ -494,6 +495,7 @@ NV-Agent supports **three ways** to add documents to your knowledge base:
 - **Delete**: Click the × button on a session — removes from memory and disk
 - **Persist**: Automatic — every message is saved to `data/sessions/{uuid}.json`
 - **Survive restarts**: Sessions are loaded from disk on server startup
+- **Survive browser refresh**: Session ID saved to `sessionStorage` — page refresh reconnects to the same session with full history
 
 ### Choosing Models
 
@@ -732,8 +734,6 @@ ACME_EMAIL=you@example.com  # for Let's Encrypt (optional)
 **CI/CD:** Push to `main` or tag `v*` → GitHub Actions builds multi-arch image → pushes to GHCR. Server pulls via `docker compose pull`.
 
 ---
-
-## 🔒 Security
 
 ## 🔒 Security
 

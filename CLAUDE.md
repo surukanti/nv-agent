@@ -26,13 +26,20 @@ pytest tests/ -v
 # Lint
 ruff check .
 
+# Format check
+ruff format --check .
+
 # Type check
 mypy . --ignore-missing-imports
+
+# Frontend dev
+cd frontend && npm run dev        # Vite on :5173 (proxies /api to :8000)
+cd frontend && npm run build:deploy  # Build React → chat/ui/ (for Docker)
 
 # Docker Compose
 make compose-up                   # Start all services (rebuilds image first)
 make compose-down                 # Stop all services
-make compose-reset                # Stop, remove volumes, restart (rebuilds image)
+make compose-reset                # Stop, remove volumes, restart (rebuilds)
 make compose-logs                 # Follow logs
 ```
 
@@ -59,20 +66,7 @@ frontend/    → React 18 + TypeScript + Vite + Tailwind v4 (dev)
 chat/ui/     → React production build (served as static files)
 chat/        → FastAPI routes (REST, SSE, WebSocket)
 agent/       → RAG logic (retrieve → augment → generate)
-kb/          → Knowledge base (ingest, chunk, embed, VectorStore)
-```
-
-**Data flow**: User query → embed → VectorStore search (FAISS/Qdrant/ChromaDB) → augment prompt → LLM generate → stream tokens back
-
-**Vector Store Backends** (pluggable via factory pattern):
-- **FAISS** (default) — Zero-infrastructure, local disk index
-- **Qdrant** — High-performance Rust vector DB (starts with all services, select via `NV_AGENT_VECTOR_STORE=qdrant`)
-- **ChromaDB** — Python-based embedding DB (starts with all services, select via `NV_AGENT_VECTOR_STORE=chromadb`)
-
-### Frontend Development
-```bash
-cd frontend && npm run dev          # Vite dev server on :5173 (proxies /api to :8000)
-cd frontend && npm run build:deploy # Build React → chat/ui/ (for Docker)
+kb/          → Knowledge base (ingest, chunk, embed, VectorStoreBase)
 ```
 
 **Data flow**: User query → embed → VectorStore search (FAISS/Qdrant/ChromaDB) → augment prompt → LLM generate → stream tokens back
@@ -89,6 +83,10 @@ Both `kb/embed.py` and `agent/rag_agent.py` lazily create one `OpenAI` client vi
 
 ### Streaming Bridge
 `chat/routes.py` → `_consume_stream()` runs `chat_stream()` in a **worker thread** → pipes events through `asyncio.Queue` → async handler sends to WebSocket/SSE. This avoids the `StopIteration`-in-async bug.
+
+### Session Persistence
+- **Server-side**: `SessionStore` saves to `data/sessions/{uuid}.json` with atomic writes (temp-file + `rename()`). Loaded on startup via `session_store.load_all()`.
+- **Client-side**: Session ID saved to `sessionStorage` — page refresh reconnects to the same session via WebSocket with `?session_id=` param and loads history. Cleared on new-session and delete-session.
 
 ### Atomic File Writes
 `SessionStore.save()` and `VectorStore.save()` use temp-file + `rename()` for POSIX atomicity. Never write directly to the target path.
@@ -125,8 +123,9 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 1. Reader function in `kb/ingest.py` (lazy import pattern like `_read_pdf`)
 2. Register in `_READERS` dict
 3. Add to `SUPPORTED_EXTENSIONS` in `chat/routes.py`
-4. Update `<input accept>` in `chat/ui/index.html`
-5. Add dependency to `requirements.txt`
+4. Update `<input accept>` in `frontend/src/components/sidebar/KBSection.tsx`
+5. Add extension to `SUPPORTED_EXTENSIONS` in `frontend/src/utils/constants.tsx`
+6. Add dependency to `requirements.txt`
 
 ### New LLM Provider
 1. Update `config.py` — change `base_url`, `chat_model`, `embedding_model`, `embedding_dim`
@@ -150,9 +149,10 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 
 - **Changing embedding model** → MUST delete `kb/index/` or vectors will mismatch
 - **`embed_query()` returns `[]` on failure** — non-fatal, search returns empty results gracefully
-- **`apiFetch()` in `app.js`** — do NOT set `Content-Type` for FormData (browser needs to set boundary)
-- **WebSocket sessions are auto-deleted** on disconnect (see `ws_chat` finally block)
+- **`apiFetch()` in `services/api.ts`** — do NOT set `Content-Type` for FormData (browser needs to set boundary)
+- **WebSocket sessions are NOT auto-deleted** on disconnect — sessions persist across connections for refresh survival
 - **`_extra_body()`** adds `chat_template_kwargs` for Nemotron thinking/reasoning tokens — other models may not support this
+- **CI checks committed code** — always `git stash && ruff check . && ruff format --check .` against what CI sees, not your working tree
 
 ## File Map (Quick)
 
@@ -164,7 +164,7 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 | `kb/chunker.py` | Text splitting (paragraph→sentence→word) |
 | `kb/embed.py` | NVIDIA embedding client (singleton) |
 | `kb/ingest.py` | Document ingestion + 12 format readers |
-| `kb/vector_store.py` | Abstract base class (VectorStoreBase) |
+| `kb/vector_store_base.py` | Abstract base class (VectorStoreBase) |
 | `kb/vector_store_faiss.py` | FAISS vector store implementation |
 | `kb/vector_store_qdrant.py` | Qdrant vector store implementation |
 | `kb/vector_store_chromadb.py` | ChromaDB vector store implementation |
@@ -172,5 +172,9 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 | `agent/rag_agent.py` | RAG logic + session management |
 | `agent/session_store.py` | Thread-safe disk persistence |
 | `chat/app.py` | FastAPI factory |
+| `chat/auth.py` | API key auth middleware |
+| `chat/rate_limit.py` | Per-IP rate limiter |
 | `chat/routes.py` | All API endpoints |
-| `chat/ui/app.js` | Client-side logic |
+| `frontend/src/context/ChatContext.tsx` | Chat state + WebSocket/SSE streaming |
+| `frontend/src/services/api.ts` | API client (`apiFetch`, auth key storage) |
+| `frontend/src/utils/constants.tsx` | Shared constants, icons, storage keys |
