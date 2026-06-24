@@ -32,7 +32,7 @@ def main() -> None:
     try:
         vs_config = get_vector_store_config()
         # Remove 'backend' from config since we pass it explicitly
-        backend = vs_config.pop("backend", config.kb.vector_store)
+        backend = str(vs_config.pop("backend", config.kb.vector_store))
         vs_config.update(config.kb.vector_store_options)
         store = create_vector_store(
             backend=backend,

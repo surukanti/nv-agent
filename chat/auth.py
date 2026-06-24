@@ -8,7 +8,8 @@ When not set, auth is disabled (open access, suitable for local dev).
 import os
 
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.types import ASGIApp
 
 
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
@@ -22,11 +23,11 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
       - Query param: ?api_key=<your-key>
     """
 
-    def __init__(self, app, auth_key: str | None = None):
+    def __init__(self, app: ASGIApp, auth_key: str | None = None):
         super().__init__(app)
         self.auth_key = auth_key
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Skip auth for non-API routes (UI, static files, OpenAPI docs)
         path = request.url.path
         if not path.startswith("/api"):

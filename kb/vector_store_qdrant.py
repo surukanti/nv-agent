@@ -80,7 +80,7 @@ class QdrantVectorStore(VectorStoreBase):
             return
 
         points = []
-        for _i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
+        for chunk, embedding in zip(chunks, embeddings, strict=False):
             point_id = hash(f"{chunk.source}_{chunk.chunk_index}") % (2**63 - 1)
             points.append(
                 models.PointStruct(
@@ -141,7 +141,7 @@ class QdrantVectorStore(VectorStoreBase):
     def count(self) -> int:
         try:
             info = self._client.get_collection(collection_name=self.collection_name)
-            return info.points_count
+            return info.points_count or 0
         except Exception:
             return 0
 
@@ -152,5 +152,5 @@ class QdrantVectorStore(VectorStoreBase):
         self._ensure_collection()
 
     @property
-    def index(self):
+    def index(self) -> object | None:
         return self._client

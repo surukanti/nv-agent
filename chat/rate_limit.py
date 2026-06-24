@@ -8,7 +8,8 @@ import time
 from collections import defaultdict
 
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.types import ASGIApp
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -18,7 +19,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Override with NV_AGENT_RATE_LIMIT env var (format: "N/minute" or "N/second").
     """
 
-    def __init__(self, app, max_requests: int = 60, window_seconds: int = 60):
+    def __init__(self, app: ASGIApp, max_requests: int = 60, window_seconds: int = 60):
         super().__init__(app)
         self.max_requests = max_requests
         self.window_seconds = window_seconds
@@ -37,7 +38,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return forwarded.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Only rate-limit API routes
         if not request.url.path.startswith("/api"):
             return await call_next(request)

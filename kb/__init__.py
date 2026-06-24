@@ -2,11 +2,11 @@
 
 from kb.chunker import Chunk, chunk_text
 from kb.ingest import ingest_documents, ingest_file, ingest_text
-from kb.vector_store import VectorStore
+from kb.vector_store_base import VectorStoreBase
 
 __all__ = [
     "Chunk",
-    "VectorStore",
+    "VectorStoreBase",
     "chunk_text",
     "ingest_documents",
     "ingest_file",

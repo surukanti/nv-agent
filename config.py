@@ -52,7 +52,7 @@ class KBConfig:
     # Backend-specific options
     vector_store_options: dict = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Load vector store config from environment variables."""
         import os
 

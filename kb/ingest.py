@@ -7,7 +7,7 @@ from pathlib import Path
 
 from config import config
 from kb.chunker import chunk_text
-from kb.vector_store import VectorStore
+from kb.vector_store_base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class DocumentIngestionError(Exception):
 
 
 def ingest_documents(
-    store: VectorStore,
+    store: VectorStoreBase,
     data_dir: str | None = None,
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,
@@ -202,7 +202,7 @@ def ingest_documents(
 
 
 def ingest_text(
-    store: VectorStore,
+    store: VectorStoreBase,
     text: str,
     source: str = "api-upload",
     chunk_size: int | None = None,
@@ -233,7 +233,7 @@ def ingest_text(
 
 
 def ingest_file(
-    store: VectorStore,
+    store: VectorStoreBase,
     file_path: str | Path,
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,

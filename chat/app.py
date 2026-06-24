@@ -58,7 +58,7 @@ def create_app() -> FastAPI:
 
     # Serve the chat UI at the root path
     @app.get("/")
-    async def serve_ui():
+    async def serve_ui() -> FileResponse:
         return FileResponse(str(_UI_DIR / "index.html"))
 
     return app
