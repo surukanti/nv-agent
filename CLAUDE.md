@@ -24,7 +24,8 @@ pip install -r requirements.txt
 pytest tests/ -v
 
 # Lint
-ruff check .
+ruff check .                    # CI lint (ruff only)
+make lint                       # Full lint: flake8 + ruff + pylint
 
 # Format check
 ruff format --check .
@@ -54,10 +55,17 @@ make compose-logs                 # Follow logs
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `NVIDIA_NIM_API_KEY` | ✅ | Primary API key (also accepts `NVIDIA_API_KEY`, `NGC_API_KEY`) |
-| `MODEL` | ❌ | Override chat model |
+| `MODEL` | ❌ | Override chat model (default: `nvidia/nemotron-3-ultra-550b-a55b`) |
 | `NV_AGENT_VECTOR_STORE` | ❌ | Vector store backend: `faiss` (default), `chromadb`, `qdrant` |
-| `NV_AGENT_AUTH_KEY` | ❌ | API key for auth middleware (protects `/api/*`) |
-| `NV_AGENT_RATE_LIMIT` | ❌ | Rate limit per IP (format: `N/unit`, e.g., `60/minute`) |
+| `NV_AGENT_AUTH_KEY` | ❌ | API key for auth middleware (protects `/api/*`, skips `/api/health*`) |
+| `NV_AGENT_RATE_LIMIT` | ❌ | Rate limit per IP (format: `N/unit`, e.g., `60/minute`, `10/second`) |
+| `NV_AGENT_QDRANT_HOST` | ❌ | Qdrant server host (default: `qdrant`) |
+| `NV_AGENT_QDRANT_PORT` | ❌ | Qdrant server port (default: `6333`) |
+| `NV_AGENT_QDRANT_API_KEY` | ❌ | Qdrant API key (for cloud/self-hosted with auth) |
+| `NV_AGENT_QDRANT_COLLECTION` | ❌ | Qdrant collection name (default: `nv_agent_kb`) |
+| `NV_AGENT_QDRANT_PATH` | ❌ | Qdrant local filesystem path (alternative to host/port) |
+| `NV_AGENT_CHROMADB_COLLECTION` | ❌ | ChromaDB collection name (default: `nv_agent_kb`) |
+| `NV_AGENT_CHROMADB_PERSIST_DIR` | ❌ | ChromaDB persist directory |
 
 ## Architecture — 4 Layers
 
@@ -129,8 +137,9 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 
 ### New LLM Provider
 1. Update `config.py` — change `base_url`, `chat_model`, `embedding_model`, `embedding_dim`
-2. Delete `kb/index/` (different embedding = different dimensions)
-3. Set appropriate API key env var
+2. Delete `kb/index/` to reset FAISS index (different embedding = different dimensions)
+3. For Qdrant/ChromaDB backends, call `DELETE /api/kb/reset` to clear computed vectors
+4. Set appropriate API key env var
 
 ### New Vector Store Backend
 1. Create new implementation in `kb/vector_store_<name>.py` inheriting `VectorStoreBase`
@@ -147,11 +156,12 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 
 ## Gotchas
 
-- **Changing embedding model** → MUST delete `kb/index/` or vectors will mismatch
+- **Changing embedding model** → MUST delete `kb/index/` or vectors will mismatch; for Qdrant/ChromaDB use `DELETE /api/kb/reset`
 - **`embed_query()` returns `[]` on failure** — non-fatal, search returns empty results gracefully
 - **`apiFetch()` in `services/api.ts`** — do NOT set `Content-Type` for FormData (browser needs to set boundary)
 - **WebSocket sessions are NOT auto-deleted** on disconnect — sessions persist across connections for refresh survival
-- **`_extra_body()`** adds `chat_template_kwargs` for Nemotron thinking/reasoning tokens — other models may not support this
+- **`RAGAgent._extra_body()`** adds `chat_template_kwargs` for Nemotron thinking/reasoning tokens — other models may not support this
+- **`RAGAgent._persist_session()`** wraps `SessionStore.save()` — call after every state-changing operation
 - **CI checks committed code** — always `git stash && ruff check . && ruff format --check .` against what CI sees, not your working tree
 
 ## File Map (Quick)
@@ -165,6 +175,7 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 | `kb/embed.py` | NVIDIA embedding client (singleton) |
 | `kb/ingest.py` | Document ingestion + 12 format readers |
 | `kb/vector_store_base.py` | Abstract base class (VectorStoreBase) |
+| `kb/vector_store.py` | ⚠️ Legacy FAISS store (tests only) |
 | `kb/vector_store_faiss.py` | FAISS vector store implementation |
 | `kb/vector_store_qdrant.py` | Qdrant vector store implementation |
 | `kb/vector_store_chromadb.py` | ChromaDB vector store implementation |
@@ -178,3 +189,9 @@ Every module uses `logging.getLogger(__name__)` with a `[prefix]` tag:
 | `frontend/src/context/ChatContext.tsx` | Chat state + WebSocket/SSE streaming |
 | `frontend/src/services/api.ts` | API client (`apiFetch`, auth key storage) |
 | `frontend/src/utils/constants.tsx` | Shared constants, icons, storage keys |
+| `docker-compose.prod.yml` | Production compose (GHCR, Caddy, limits) |
+| `Caddyfile` | Reverse proxy (auto HTTPS via Let's Encrypt) |
+| `deploy.sh` | One-command remote deployment |
+| `Makefile` | Build, test, lint, Docker shortcuts |
+| `requirements-dev.txt` | Dev dependencies |
+| `.pylintrc` | Pylint configuration |

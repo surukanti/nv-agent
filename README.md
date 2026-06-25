@@ -60,7 +60,7 @@ NV-Agent is a **complete, self-contained AI agent system** — not a library, no
 
 It is a **RAG (Retrieval-Augmented Generation) agent** that:
 
-1. **Retrieves** relevant document chunks from a FAISS vector knowledge base
+1. **Retrieves** relevant document chunks from a pluggable vector knowledge base (FAISS / Qdrant / ChromaDB)
 2. **Augments** the LLM prompt with retrieved context and source citations
 3. **Generates** grounded answers via NVIDIA NIM LLMs with real-time streaming
 
@@ -315,7 +315,13 @@ nv-agent/
 ├── .gitignore               # 🛡️ Excludes .env, sessions, __pycache__, .venv
 ├── .pre-commit-config.yaml  # 🪝 Pre-commit hooks (ruff, mypy, checks)
 ├── Dockerfile               # 🐳 Multi-stage Docker build (Python 3.12-slim)
-├── docker-compose.yml       # 🐳 Compose for easy deployment with volumes
+├── docker-compose.yml       # 🐳 Compose: nv-agent + qdrant + chromadb
+├── docker-compose.prod.yml # 🐳 Production compose (GHCR image, Caddy, resource limits)
+├── Caddyfile               # 🌐 Reverse proxy config (auto HTTPS via Let's Encrypt)
+├── deploy.sh               # 🚀 One-command remote deployment script
+├── Makefile                 # ⚡ Build, test, lint, Docker, compose shortcuts
+├── requirements-dev.txt     # 📦 Dev dependencies (pytest, ruff, mypy, pre-commit, flake8, pylint)
+├── .pylintrc               # 🔧 Pylint configuration
 ├── LICENSE                  # 📄 MIT License
 ├── README.md                # 📖 You are here
 ├── AGENTS.md                # 🤖 AI agent guidelines and architecture
@@ -331,6 +337,7 @@ nv-agent/
 │   ├── embed.py             #    NVIDIA embedding client (singleton, batched, error-handled)
 │   ├── ingest.py            #    File ingestion + readers (PDF, DOCX, 10 text formats)
 │   ├── vector_store_base.py     #    Abstract base class (VectorStoreBase)
+│   ├── vector_store.py          #    ⚠️ Legacy FAISS store (tests only), superseded by factory pattern
 │   ├── vector_store_faiss.py        #    FAISS vector store implementation
 │   ├── vector_store_qdrant.py       #    Qdrant vector store implementation
 │   ├── vector_store_chromadb.py     #    ChromaDB vector store implementation
@@ -444,6 +451,26 @@ Then open **http://localhost:8000** in your browser and start chatting.
 - 🖥️ **Chat UI**: http://localhost:8000
 - 📖 **Interactive API Docs**: http://localhost:8000/docs
 
+<details>
+<summary>⚡ Makefile shortcuts (optional)</summary>
+
+```bash
+make install         # Install runtime dependencies
+make install-dev     # Install runtime + dev dependencies
+make run             # Run production server
+make run-dev         # Run with uvicorn --reload
+make lint            # Run flake8 + ruff + pylint
+make format          # Auto-format with ruff
+make test            # Run pytest -v
+make test-cov        # Run pytest with coverage
+make typecheck       # Run mypy
+make ci              # Full CI pipeline (lint + test + typecheck)
+make smoke           # Quick smoke: unit tests + Docker health check
+make clean           # Remove caches, temp files, build artifacts
+```
+
+</details>
+
 ### Quick API Test (No Server)
 
 To verify your API key before launching the full server:
@@ -533,8 +560,8 @@ All settings are in `config.py` with sensible defaults. Override via environment
 | Backend | Required Env Vars | Optional Env Vars | Notes |
 |---------|-------------------|-------------------|-------|
 | **FAISS** (default) | — | — | Zero-infrastructure, index on disk, no external service |
+| **Qdrant** | `NV_AGENT_VECTOR_STORE=qdrant` | `NV_AGENT_QDRANT_COLLECTION`, `NV_AGENT_QDRANT_PATH` (local mode), or `NV_AGENT_QDRANT_HOST`, `NV_AGENT_QDRANT_PORT`, `NV_AGENT_QDRANT_API_KEY` (server mode) | High-performance Rust vector DB |
 | **ChromaDB** | `NV_AGENT_VECTOR_STORE=chromadb` | `NV_AGENT_CHROMADB_COLLECTION`, `NV_AGENT_CHROMADB_PERSIST_DIR` | Open-source embedding DB, local file-based |
-| **Qdrant** | `NV_AGENT_VECTOR_STORE=qdrant` | `NV_AGENT_QDRANT_PATH` (local mode), or `NV_AGENT_QDRANT_HOST`, `NV_AGENT_QDRANT_PORT`, `NV_AGENT_QDRANT_API_KEY` (server mode) | High-performance Rust vector DB |
 
 **Install optional dependencies:**
 ```bash
@@ -649,7 +676,7 @@ docker run -p 8000:8000 --env-file .env -v $(pwd)/data:/app/data nv-agent
 
 > **Note:** `--build` ensures the Docker image is rebuilt with your latest code and UI changes. The Dockerfile uses separate `COPY` layers for Python code and UI assets, so UI-only edits don't invalidate the Python layer cache.
 
-**Docker Compose** persists your documents and FAISS index in named volumes, so they survive container restarts.
+**Docker Compose** persists your documents and FAISS index in named volumes, so they survive container restarts. Note: the `nv-agent-sessions` volume overrides the `./data:/app/data` bind mount at the `/app/data/sessions` subpath — sessions live inside the Docker volume, not on the host filesystem at `./data/sessions/`.
 
 ### Option 2: With Qdrant Vector Database (Recommended for Production)
 ```bash
@@ -760,7 +787,9 @@ We welcome contributions! See [AGENTS.md](AGENTS.md) for the full architecture g
 git clone <your-repo-url> && cd nv-agent
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt  # Dev tools: pytest, ruff, mypy, pre-commit, flake8, pylint
 cp .env.example .env        # Add your NVIDIA API key
+pre-commit install           # Optional: set up git hooks
 ```
 
 ### Contribution Workflow
@@ -773,20 +802,22 @@ cp .env.example .env        # Add your NVIDIA API key
 
 ### Adding a New File Format
 
-1. Add a reader function in `kb/ingest.py` — follow the `_read_pdf` / `_read_docx` pattern
+1. Add a reader function in `kb/ingest.py` — follow the `_read_pdf` / `_read_docx` pattern (lazy import, per-page/per-section error handling)
 2. Register it in the `_READERS` dict
 3. Add the extension to `SUPPORTED_EXTENSIONS` in `chat/routes.py`
-4. Update the `accept` attribute on the file input in `chat/ui/index.html`
-5. Add the dependency to `requirements.txt`
-6. Test by uploading a file through the UI
+4. Update the `<input accept="...">` attribute in `frontend/src/components/sidebar/KBSection.tsx`
+5. Add the extension to `SUPPORTED_EXTENSIONS` in `frontend/src/utils/constants.tsx`
+6. Add the dependency to `requirements.txt`
+7. Test by uploading a file through the UI
 
 ### Adding a New LLM Provider
 
 NV-Agent uses the OpenAI-compatible API format via `config.nvidia.base_url`. To switch providers:
 
 1. Update `config.py` — change `base_url`, `chat_model`, `embedding_model`, `embedding_dim`
-2. Delete `kb/index/` to reset the vector store (different embedding = different dimensions)
-3. Set the appropriate API key env var
+2. Delete `kb/index/` to reset the FAISS vector index (different embedding = different dimensions)
+3. For Qdrant/ChromaDB backends, call `DELETE /api/kb/reset` to clear computed vectors
+4. Set the appropriate API key env var
 
 ---
 

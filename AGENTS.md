@@ -61,7 +61,7 @@ It is NOT a framework or a library. It is a **finished application** that you ru
 NV-Agent is a **RAG (Retrieval-Augmented Generation) AI Agent** — an autonomous system that:
 
 1. **Perceives**: Receives a user query via REST, SSE, or WebSocket
-2. **Reasons**: Embeds the query, searches the FAISS knowledge base for relevant context
+2. **Reasons**: Embeds the query, searches the vector knowledge base (FAISS / Qdrant / ChromaDB) for relevant context
 3. **Acts**: Augments the LLM prompt with retrieved document chunks and source citations
 4. **Generates**: Streams a grounded answer via NVIDIA NIM LLMs, with reasoning/thinking display
 5. **Persists**: Saves the complete conversation to disk for session continuity
@@ -98,18 +98,19 @@ The agent follows the **Retrieve → Augment → Generate** pattern: for every u
 │  │          │    │              │    │           │    │          │ │
 │  │  Chat    │◀──▶│  Chat API    │◀──▶│ RAG Agent │◀──▶│Knowledge │ │
 │  │  UI      │    │  (FastAPI)   │    │ (LLM+RAG) │    │  Base    │ │
-│  │          │    │              │    │           │    │(FAISS +  │ │
-│  │ Browser  │    │ REST / SSE / │    │ Retrieve →│    │ Embeds)  │ │
+│  │          │    │              │    │           │    │(Vector   │ │
+│  │ Browser  │    │ REST / SSE / │    │ Retrieve →│    │ Store)   │ │
 │  │ WebSocket│    │ WebSocket    │    │ Augment → │    │          │ │
 │  │ + SSE    │    │              │    │ Generate  │    │          │ │
 │  └──────────┘    └──────────────┘    └───────────┘    └──────────┘ │
 │       ▲               ▲                   ▲               ▲       │
 │       │               │                   │               │       │
 │       │          ┌────┴─────┐        ┌────┴─────┐   ┌────┴────┐  │
-│       │          │  Session │        │  NVIDIA   │   │  FAISS  │  │
-│       │          │  Store   │        │  NIM API  │   │  Index  │  │
-│       │          │  (Disk)  │        │ (Cloud)   │   │  (Disk) │  │
-│       │          └──────────┘        └───────────┘   └─────────┘  │
+│       │          │  Session │        │  NVIDIA   │   │ Vector  │  │
+│       │          │  Store   │        │  NIM API  │   │ Store   │  │
+│       │          │  (Disk)  │        │ (Cloud)   │   │(FAISS/  │  │
+│       │          └──────────┘        └───────────┘   │Qdrant/  │  │
+│       │                                               │ChromaDB)│  │
 │       │                                                              │
 │  ┌────┴──────────────────────────────────────────────────────────┐  │
 │  │                     config.py (.env)                          │  │
@@ -371,6 +372,7 @@ nv-agent/
 │   ├── embed.py             # NVIDIA embedding client (singleton, batched, error-handled)
 │   ├── ingest.py            # Document ingestion + 12 format readers + DocumentIngestionError
 │   ├── vector_store_base.py      # Abstract base class (VectorStoreBase)
+│   ├── vector_store.py            # ⚠️ Legacy FAISS store (tests only), superseded by factory pattern
 │   ├── vector_store_faiss.py        # FAISS implementation
 │   ├── vector_store_qdrant.py       # Qdrant implementation
 │   ├── vector_store_chromadb.py     # ChromaDB implementation
@@ -422,6 +424,13 @@ nv-agent/
 │   └── workflows/
 │       └── ci.yml           # GitHub Actions: lint + type check + test + Docker build
 │
+├── docker-compose.prod.yml # Production compose (GHCR image, Caddy, resource limits)
+├── Caddyfile               # Reverse proxy config (auto HTTPS via Let's Encrypt)
+├── deploy.sh               # One-command remote deployment script
+├── Makefile                 # Build, test, lint, Docker, compose shortcuts
+├── requirements-dev.txt     # Dev dependencies (pytest, ruff, mypy, pre-commit, flake8, pylint)
+├── .pylintrc               # Pylint configuration
+│
 └── .claude/                 # Claude Code settings
     └── settings.local.json  # Local permissions
 ```
@@ -459,6 +468,8 @@ NV_AGENT_VECTOR_STORE=qdrant     # Qdrant service starts with all services
 NV_AGENT_VECTOR_STORE=chromadb   # ChromaDB service starts with all services
 ```
 
+> **Docker volume note**: The `nv-agent-sessions` named volume overrides the `./data:/app/data` bind mount at `/app/data/sessions` — sessions live inside the Docker volume, not on the host filesystem at `./data/sessions/`.
+
 ### Quick API Smoke Test
 
 `python test-agent.py` — Standalone CLI test that calls the NVIDIA NIM API directly. Bypasses the entire RAG pipeline (no FAISS, no documents, no web server). Uses `deepseek-ai/deepseek-v4-pro` by default, unlike `main.py` which uses `config.nvidia.chat_model`. Useful for verifying API key validity before launching the server.
@@ -467,7 +478,7 @@ NV_AGENT_VECTOR_STORE=chromadb   # ChromaDB service starts with all services
 
 ```
 1. Validate NVIDIA_API_KEY → exit(1) if missing
-2. Load/create FAISS VectorStore from kb/index/
+2. Load/create VectorStore via factory (FAISS / Qdrant / ChromaDB)
 3. Auto-ingest all files in data/ (skipping sessions/, .git, .venv, __pycache__, .claude)
 4. Initialize SessionStore from data/sessions/
 5. Load all persisted sessions into RAGAgent
@@ -571,7 +582,7 @@ All settings in `config.py` (dataclasses). Key env vars:
 - Writes use temp-file + `rename()` for POSIX atomicity — no half-written files on crash
 - Thread-safe: all file operations guarded by `threading.Lock`
 - Each session stores: `id`, `title`, `created_at`, `updated_at`, full message history with per-message `timestamp`
-- `SessionStore.save()` is called after every chat message (both sync and streaming)
+- `SessionStore.save()` is called via `RAGAgent._persist_session()` after every chat message (both sync and streaming)
 - On startup, `RAGAgent.__init__()` calls `session_store.load_all()` to recover previous sessions
 
 ### Chunking (`kb/chunker.py`)
@@ -720,11 +731,13 @@ make test-cov
 
 ### CI Pipeline
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main`:
-1. **Lint** — `ruff check .` + `ruff format --check .`
-2. **Type check** — `mypy` (allowed to fail)
-3. **Tests** — `pytest` with mocked API key
-4. **Docker build** — Verifies container builds and starts
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR to `main`:
+1. **Lint** — `ruff check .` + `ruff format --check .` (hard failure)
+2. **Type check** — `mypy` with `pyproject.toml` config (allowed to fail — `continue-on-error: true`)
+3. **Tests** — `pytest tests/ -v -m "unit or api"` with `NVIDIA_API_KEY=nvapi-test-ci-key` (depends on lint passing)
+4. **Docker build** — Builds image, verifies container starts and passes health check within 120s (depends on lint + test)
+
+> **Note**: The Makefile `lint` target also runs `flake8` and `pylint` in addition to `ruff`. CI uses only `ruff`; local `make lint` is stricter.
 
 ### Manual Validation
 
@@ -746,7 +759,7 @@ For features not covered by automated tests:
 | Creating new OpenAI client per call | Connection churn, slow performance | Use singleton `_get_client()` pattern |
 | Running `chat_stream()` directly in async context | `StopIteration` bug in async generators | Always use `_consume_stream()` in worker thread + `asyncio.Queue` |
 | Committing `.env` | API key leaked to source control | `.env` is in `.gitignore` — NEVER override this |
-| Forgetting `_persist()` | Session saved in memory but not on disk → lost on restart | Call `_persist()` after every state-changing operation |
+| Forgetting to persist sessions | Session saved in memory but not on disk → lost on restart | `RAGAgent._persist_session()` wraps `SessionStore.save()` — call after every state-changing operation |
 | Setting `Content-Type` for FormData uploads | Browser can't set multipart boundary → server rejects | `apiFetch()` skips Content-Type for FormData — don't add it |
 | Using `embed_query()` failure as fatal | Single query failure crashes the whole chat | `embed_query()` returns `[]` on failure → search returns empty results gracefully |
 | Switching vector store backends without re-ingesting | Empty KB or dimension mismatch | Re-ingest documents after changing `NV_AGENT_VECTOR_STORE` |
