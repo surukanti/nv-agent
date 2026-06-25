@@ -20,8 +20,8 @@ RESET := \033[0m
 # ── Phony targets ────────────────────────────────────────────
 .PHONY: help install install-dev lint format test test-cov \
         typecheck run run-dev docker-build docker-run docker-stop \
-        compose-up compose-down compose-reset compose-logs compose-ps \
-        clean
+        compose-build compose-up compose-down compose-reset compose-logs compose-ps \
+        frontend clean
 
 # ── Default ──────────────────────────────────────────────────
 help: ## Show this help
@@ -108,9 +108,16 @@ docker-test: docker-stop docker-build ## Build & run container, test health, the
 	-$(DOCKER) stop $(IMAGE_NAME)-test >/dev/null 2>&1
 	-$(DOCKER) rm $(IMAGE_NAME)-test >/dev/null 2>&1
 
+# ── Frontend Build ─────────────────────────────────────────────
+frontend:
+	cd frontend && npm ci && npm run build:deploy
+
 # ── Docker Compose ───────────────────────────────────────────
-compose-up: ## Start all services (rebuilds image first to pick up code/UI changes)
-	$(DOCKER) compose up -d --build
+compose-build: frontend ## Build frontend + Docker image
+	$(DOCKER) compose build
+
+compose-up: compose-build ## Build frontend + image, start all services
+	$(DOCKER) compose up -d
 
 compose-down: ## Stop all services
 	$(DOCKER) compose down

@@ -467,6 +467,15 @@ make typecheck       # Run mypy
 make ci              # Full CI pipeline (lint + test + typecheck)
 make smoke           # Quick smoke: unit tests + Docker health check
 make clean           # Remove caches, temp files, build artifacts
+
+# Docker / Frontend
+make frontend        # Build React frontend (npm ci + build:deploy)
+make compose-build   # Build frontend + Docker image
+make compose-up      # Build frontend + image, start all services (recommended)
+make compose-down    # Stop all services
+make compose-reset   # Stop, remove volumes, restart clean
+make compose-logs    # Follow compose logs
+make compose-ps      # List compose services
 ```
 
 </details>
@@ -662,19 +671,20 @@ Run NV-Agent in a container — no Python installation needed on the host.
 
 ### Option 1: FAISS (Default) — Zero External Dependencies
 ```bash
-# Build and run with docker compose
+# Build frontend + run with docker compose
 cp .env.example .env  # Set your NVIDIA API key
-docker compose up -d --build
+make compose-up       # Builds frontend (npm run build:deploy) + Docker image, then starts all services
 
-# Or use the Makefile (also passes --build)
-make compose-up
+# Or step-by-step:
+cd frontend && npm run build:deploy  # Build React → chat/ui/
+docker compose up -d --build         # Build image (copies chat/ui/) + start
 
 # Or build manually
 docker build -t nv-agent .
 docker run -p 8000:8000 --env-file .env -v $(pwd)/data:/app/data nv-agent
 ```
 
-> **Note:** `--build` ensures the Docker image is rebuilt with your latest code and UI changes. The Dockerfile uses separate `COPY` layers for Python code and UI assets, so UI-only edits don't invalidate the Python layer cache.
+> **Note:** The Docker image copies the pre-built `chat/ui/` directory. You **must** run `npm run build:deploy` (or `make frontend`) before building the Docker image — the Dockerfile does not run the frontend build. The Makefile `compose-up` target handles this automatically via `compose-build`.
 
 **Docker Compose** persists your documents and FAISS index in named volumes, so they survive container restarts. Note: the `nv-agent-sessions` volume overrides the `./data:/app/data` bind mount at the `/app/data/sessions` subpath — sessions live inside the Docker volume, not on the host filesystem at `./data/sessions/`.
 
