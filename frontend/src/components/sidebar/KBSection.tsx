@@ -152,15 +152,38 @@ export function KBSection({
         </button>
         {expandedAction === 'upload' && (
           <div className="flex flex-col gap-2 pt-1 px-1">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={SUPPORTED_EXTENSIONS}
-              onChange={e => setSelectedFile(e.target.files?.[0] ?? null)}
-              className="text-xs text-zinc-500"
-              aria-label="Choose file to upload"
-            />
-            {selectedFile && <span className="text-[11px] text-zinc-500">Selected: {selectedFile.name}</span>}
+            <label className="relative cursor-pointer">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={SUPPORTED_EXTENSIONS}
+                onChange={e => setSelectedFile(e.target.files?.[0] ?? null)}
+                className="sr-only"
+                aria-label="Choose file to upload"
+              />
+              <span className="inline-flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg bg-[var(--color-elevated)] border border-[var(--color-border)] text-sm text-zinc-300 hover:border-brand/50 hover:bg-[var(--color-base)] transition-colors">
+                {ICONS.upload}
+                <span>Choose file…</span>
+              </span>
+            </label>
+            {selectedFile && (
+              <div className="flex items-center justify-between gap-2 px-1">
+                <span className="flex-1 truncate text-[11px] text-zinc-500">
+                  Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                  aria-label="Remove selected file"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <button
               onClick={handleUploadFile}
               disabled={!selectedFile || loading || uploading}
