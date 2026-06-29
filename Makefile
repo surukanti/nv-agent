@@ -122,7 +122,7 @@ compose-up: compose-build ## Build frontend + image, start all services
 compose-down: ## Stop all services
 	$(DOCKER) compose down
 
-compose-reset: ## Stop, remove volumes, and restart clean (all services)
+compose-reset: frontend ## Stop, remove volumes, rebuild frontend + image, and restart clean
 	$(DOCKER) compose down -v
 	$(DOCKER) compose up -d --build
 
